@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha Bank | Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body class="app-body" data-protected="true">
+  <div class="app-layout">
+    <aside class="sidebar glass-card">
+      <div>
+        <div class="logo-block">
+          <div class="brand-badge">AB</div>
+          <div>
+            <p class="eyebrow">Alpha Bank</p>
+            <h2>Banking Suite</h2>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <a href="dashboard.html" class="nav-link active">Overview</a>
+          <a href="transfer.html" class="nav-link">Transfer</a>
+          <a href="transactions.html" class="nav-link">Transactions</a>
+          <a href="profile.html" class="nav-link">Profile</a>
+        </nav>
+      </div>
+
+      <button class="btn btn-secondary btn-block logout-btn">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar glass-card">
+        <div>
+          <p class="eyebrow">Dashboard</p>
+          <h1>Hello, <span data-user-name>Customer</span></h1>
+        </div>
+        <div class="topbar-actions">
+          <a href="transfer.html" class="btn btn-primary">New Transfer</a>
+        </div>
+      </header>
+
+      <section class="hero-card glass-card">
+        <div>
+          <p class="eyebrow">Available Balance</p>
+          <h2 id="dashboardBalance">₦0.00</h2>
+          <p class="muted">Account Number: <span id="dashboardAccountNumber">0000000000</span></p>
+        </div>
+        <div class="hero-chip">
+          <span>Alpha Secure</span>
+        </div>
+      </section>
+
+      <section class="stats-grid">
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">💼</span>
+          <div>
+            <p>Total Balance</p>
+            <h3 id="miniBalance">₦0.00</h3>
+          </div>
+        </article>
+
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">📈</span>
+          <div>
+            <p>Total Credits</p>
+            <h3 id="totalCredits">₦0.00</h3>
+          </div>
+        </article>
+
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">📉</span>
+          <div>
+            <p>Total Debits</p>
+            <h3 id="totalDebits">₦0.00</h3>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid">
+        <article class="panel glass-card">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Recent activity</p>
+              <h3>Last 5 Transactions</h3>
+            </div>
+            <a href="transactions.html" class="text-link">View All</a>
+          </div>
+          <div id="recentTransactions" class="transaction-list"></div>
+        </article>
+
+        <article class="panel glass-card quick-actions-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Quick actions</p>
+              <h3>Move faster</h3>
+            </div>
+          </div>
+          <div class="quick-actions-grid">
+            <a href="transfer.html" class="quick-action-card">
+              <span>💸</span>
+              <strong>Send Money</strong>
+              <p>Transfer instantly to another account.</p>
+            </a>
+            <a href="transactions.html" class="quick-action-card">
+              <span>🧾</span>
+              <strong>History</strong>
+              <p>Review all credit and debit activity.</p>
+            </a>
+            <a href="profile.html" class="quick-action-card">
+              <span>👤</span>
+              <strong>Profile</strong>
+              <p>Manage account identity and access.</p>
+            </a>
+          </div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+  <script src="auth.js"></script>
+  <script src="transactions.js"></script>
+</body>
+</html>

@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha Bank | Transfer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body class="app-body" data-protected="true">
+  <div class="app-layout">
+    <aside class="sidebar glass-card">
+      <div>
+        <div class="logo-block">
+          <div class="brand-badge">AB</div>
+          <div>
+            <p class="eyebrow">Alpha Bank</p>
+            <h2>Banking Suite</h2>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <a href="dashboard.html" class="nav-link">Overview</a>
+          <a href="transfer.html" class="nav-link active">Transfer</a>
+          <a href="transactions.html" class="nav-link">Transactions</a>
+          <a href="profile.html" class="nav-link">Profile</a>
+        </nav>
+      </div>
+
+      <button class="btn btn-secondary btn-block logout-btn">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar glass-card">
+        <div>
+          <p class="eyebrow">Transfer</p>
+          <h1>Send Money</h1>
+        </div>
+        <div class="topbar-balance">
+          <span>Available</span>
+          <strong id="transferAvailableBalance">₦0.00</strong>
+        </div>
+      </header>
+
+      <section class="content-grid single-panel">
+        <article class="panel glass-card form-panel">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Instant payout</p>
+              <h3>Transfer details</h3>
+            </div>
+          </div>
+
+          <div id="transferMessage" class="alert-box"></div>
+
+          <form id="transferForm" class="transfer-form" autocomplete="off">
+            <label class="input-group">
+              <span>Recipient Account Number</span>
+              <input type="text" id="recipientAccount" maxlength="10" placeholder="Enter 10-digit account number" required />
+            </label>
+
+            <label class="input-group">
+              <span>Amount</span>
+              <input type="number" id="transferAmount" min="1" step="0.01" placeholder="Enter amount" required />
+            </label>
+
+            <button type="submit" class="btn btn-primary btn-block">Complete Transfer</button>
+          </form>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+  <script src="auth.js"></script>
+  <script src="transactions.js"></script>
+</body>
+</html>
