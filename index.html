@@ -61,8 +61,8 @@
         </div>
 
         <label class="input-group">
-          <span>Email / Username</span>
-          <input type="text" id="loginUsername" placeholder="Enter email or username" required />
+          <span>Email / Account Number</span>
+          <input type="text" id="loginUsername" placeholder="Enter email or account number" required />
         </label>
 
         <label class="input-group">
@@ -78,18 +78,18 @@
 
       <form id="registerForm" class="auth-form" autocomplete="off">
         <div class="form-header">
-          <h2>Create account</h2>
-          <p>Use the 10-digit account number issued by admin to activate your account.</p>
+          <h2>Activate account</h2>
+          <p>Use the account number issued by admin to activate your account if it has not been activated yet.</p>
         </div>
 
         <label class="input-group">
           <span>Admin Account Number</span>
-          <input type="text" id="registerAccountNumber" maxlength="10" placeholder="Enter 10-digit account number" required />
+          <input type="text" id="registerAccountNumber" placeholder="Enter admin-issued account number" required />
         </label>
 
         <label class="input-group">
-          <span>Username</span>
-          <input type="text" id="registerUsername" placeholder="Choose username" required />
+          <span>Full Name</span>
+          <input type="text" id="registerUsername" placeholder="Enter your full name" required />
         </label>
 
         <label class="input-group">
@@ -108,7 +108,7 @@
           </div>
         </label>
 
-        <button type="submit" class="btn btn-accent btn-block">Register</button>
+        <button type="submit" class="btn btn-accent btn-block">Activate Account</button>
       </form>
     </section>
   </main>

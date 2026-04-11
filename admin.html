@@ -84,20 +84,81 @@
 
           <form id="adminCreateUserForm" class="transfer-form" autocomplete="off">
             <label class="input-group">
-              <span>Initial Balance</span>
-              <input type="number" id="adminInitialBalance" min="0" step="0.01" placeholder="Enter opening balance" required />
+              <span>Full Name</span>
+              <input type="text" id="adminFullName" placeholder="Enter full name" required />
+            </label>
+
+            <label class="input-group">
+              <span>Email</span>
+              <input type="email" id="adminEmail" placeholder="Enter email address" required />
+            </label>
+
+            <label class="input-group">
+              <span>Phone Number</span>
+              <input type="text" id="adminPhone" placeholder="Enter phone number" required />
+            </label>
+
+            <label class="input-group">
+              <span>Password</span>
+              <div class="password-wrap">
+                <input type="password" id="adminPassword" placeholder="Enter password" required />
+                <button type="button" class="toggle-password" data-target="adminPassword">Show</button>
+              </div>
+            </label>
+
+            <label class="input-group">
+              <span>Confirm Password</span>
+              <div class="password-wrap">
+                <input type="password" id="adminConfirmPassword" placeholder="Confirm password" required />
+                <button type="button" class="toggle-password" data-target="adminConfirmPassword">Show</button>
+              </div>
+            </label>
+
+            <label class="input-group">
+              <span>Region</span>
+              <select id="adminRegion" required>
+                <option value="USA">USA</option>
+                <option value="UK">UK</option>
+                <option value="EUROPE">EUROPE</option>
+              </select>
             </label>
 
             <label class="input-group">
               <span>Account Currency</span>
               <select id="adminCurrency" required>
-                <option value="GBP">Pounds (GBP)</option>
                 <option value="USD">Dollars (USD)</option>
+                <option value="GBP">Pounds (GBP)</option>
                 <option value="EUR">Euro (EUR)</option>
               </select>
             </label>
 
+            <label class="input-group">
+              <span>Initial Balance</span>
+              <input type="number" id="adminInitialBalance" min="0" step="0.01" placeholder="Enter opening balance" required />
+            </label>
+
             <button type="submit" class="btn btn-primary btn-block">Create Customer Account</button>
+          </form>
+
+          <div class="panel-header" style="margin-top: 24px;">
+            <div>
+              <p class="eyebrow">Add Balance</p>
+              <h3>Credit Existing Customer</h3>
+            </div>
+          </div>
+
+          <form id="adminAddBalanceForm" class="transfer-form" autocomplete="off">
+            <label class="input-group">
+              <span>Account Number</span>
+              <input type="text" id="adminBalanceAccountNumber" placeholder="Enter customer account number" required />
+            </label>
+
+            <label class="input-group">
+              <span>Amount</span>
+              <input type="number" id="adminBalanceAmount" min="0.01" step="0.01" placeholder="Enter amount to add" required />
+            </label>
+
+            <button type="submit" class="btn btn-secondary btn-block">Add Balance</button>
           </form>
         </article>
 
