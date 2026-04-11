@@ -11,19 +11,12 @@ document.addEventListener('DOMContentLoaded', () => {
   let refreshTimer = null;
 
   const transactionDirection = (transaction, currentAccountNumber) => {
-    const isOutgoing = transaction.sender_account === currentAccountNumber && String(transaction.transaction_type || '').toLowerCase() === 'debit';
-    const isRefund = String(transaction.receipt || '').endsWith('-RF');
+    const type = String(transaction.transaction_type || '').toLowerCase();
+    const sender = String(transaction.sender_account || '');
+    const receiver = String(transaction.receiver_account || '');
+    const account = String(currentAccountNumber || '');
 
-    if (isRefund) {
-      return {
-        label: 'Refund',
-        typeClass: 'type-credit',
-        amountClass: 'amount-credit',
-        prefix: '+'
-      };
-    }
-
-    if (isOutgoing) {
+    if (type === 'debit' && sender === account) {
       return {
         label: 'Debit',
         typeClass: 'type-debit',
@@ -32,11 +25,20 @@ document.addEventListener('DOMContentLoaded', () => {
       };
     }
 
+    if (type === 'credit' && receiver === account) {
+      return {
+        label: 'Credit',
+        typeClass: 'type-credit',
+        amountClass: 'amount-credit',
+        prefix: '+'
+      };
+    }
+
     return {
-      label: 'Credit',
-      typeClass: 'type-credit',
-      amountClass: 'amount-credit',
-      prefix: '+'
+      label: sender === account ? 'Debit' : 'Credit',
+      typeClass: sender === account ? 'type-debit' : 'type-credit',
+      amountClass: sender === account ? 'amount-debit' : 'amount-credit',
+      prefix: sender === account ? '-' : '+'
     };
   };
 
@@ -45,12 +47,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderDashboard = (user, transactions) => {
     const recentTransactions = transactions.slice(0, 5);
     const totalCreditsValue = transactions
-      .filter((txn) => transactionDirection(txn, user.account_number).label !== 'Debit')
+      .filter((txn) => transactionDirection(txn, user.account_number).label === 'Credit')
       .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
 
     const totalDebitsValue = transactions
       .filter((txn) => transactionDirection(txn, user.account_number).label === 'Debit')
-      .reduce((sum, txn) => sum + bank.calculateCharges(txn.amount || 0).totalDebit, 0);
+      .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
 
     bank.setText('[data-user-name]', user.username || 'Customer');
     bank.setText('#dashboardAccountNumber', user.account_number);
@@ -68,9 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     recentContainer.innerHTML = recentTransactions.map((txn) => {
-      const displayStatus = bank.getDisplayStatus(txn, transactions, user.account_number);
+      const displayStatus = bank.getDisplayStatus(txn);
       const direction = transactionDirection(txn, user.account_number);
-      const title = direction.label === 'Debit' ? 'Transfer Sent' : direction.label === 'Refund' ? 'Refund Received' : 'Transfer Received';
+      const title = direction.label === 'Debit' ? 'Transfer Sent' : 'Transfer Received';
 
       return `
         <div class="transaction-item">
@@ -116,7 +118,7 @@ document.addEventListener('DOMContentLoaded', () => {
         </thead>
         <tbody>
           ${transactions.map((txn) => {
-            const displayStatus = bank.getDisplayStatus(txn, transactions, user.account_number);
+            const displayStatus = bank.getDisplayStatus(txn);
             const direction = transactionDirection(txn, user.account_number);
             return `
               <tr>
@@ -155,7 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!freshUser) {
       bank.clearSession();
       window.location.replace('index.html');
-      return;
+      return null;
     }
 
     const rawTransactions = await bank.fetchTransactionsForAccount(freshUser.account_number);
@@ -173,9 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
       event.preventDefault();
       bank.hideFeedback(messageBox);
 
-      const recipientAccountInput = document.getElementById('recipientAccount');
+      const recipientAccount = document.getElementById('recipientAccount').value.trim();
       const amountInput = document.getElementById('transferAmount');
-      const recipientAccount = recipientAccountInput.value.trim();
       const amount = Number(amountInput.value);
       const submitButton = transferForm.querySelector('button[type="submit"]');
 
@@ -210,49 +211,64 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const receiver = await bank.fetchUserByAccountNumber(recipientAccount);
-        if (!receiver || bank.isSystemAccount(receiver)) {
+        if (!receiver) {
           bank.showFeedback(messageBox, 'Recipient account not found.', 'error');
           return;
         }
 
-        const charges = bank.calculateCharges(amount);
-        if (charges.totalDebit > Number(sender.balance || 0)) {
-          bank.showFeedback(messageBox, `Insufficient balance. Required: ${bank.formatCurrency(charges.totalDebit, sender.currency)}.`, 'error');
+        const transfer = bank.calculateCharges(amount);
+        if (transfer.totalDebit > Number(sender.balance || 0)) {
+          bank.showFeedback(messageBox, `Insufficient balance. Required: ${bank.formatCurrency(transfer.totalDebit, sender.currency)}.`, 'error');
           return;
         }
 
         const receipt = bank.generateReceipt();
-        const senderNewBalance = bank.roundMoney(Number(sender.balance) - charges.totalDebit);
+        const senderBalance = bank.roundMoney(Number(sender.balance || 0) - transfer.totalDebit);
+        const receiverBalance = bank.roundMoney(Number(receiver.balance || 0) + transfer.amount);
+
+        await bank.updateUserByAccountNumber(sender.account_number, {
+          balance: senderBalance
+        });
+
+        await bank.updateUserByAccountNumber(receiver.account_number, {
+          balance: receiverBalance
+        });
 
         await bank.insertRow({
           username: sender.username || '',
           password: '',
           account_number: '',
           balance: null,
-          currency: sender.currency,
-          amount: bank.roundMoney(amount),
+          currency: sender.currency || 'USD',
+          amount: transfer.amount,
           sender_account: sender.account_number,
-          receiver_account: recipientAccount,
+          receiver_account: receiver.account_number,
           transaction_type: 'debit',
           status: 'success',
           receipt
         });
 
-        await bank.updateUserByAccountNumber(sender.account_number, {
-          balance: senderNewBalance
+        await bank.insertRow({
+          username: receiver.username || '',
+          password: '',
+          account_number: '',
+          balance: null,
+          currency: receiver.currency || sender.currency || 'USD',
+          amount: transfer.amount,
+          sender_account: sender.account_number,
+          receiver_account: receiver.account_number,
+          transaction_type: 'credit',
+          status: 'success',
+          receipt: `${receipt}-CR`
         });
 
-        bank.showFeedback(
-          messageBox,
-          `Transfer submitted. Receipt: ${receipt}. Total deduction: ${bank.formatCurrency(charges.totalDebit, sender.currency)}.`,
-          'success'
-        );
+        bank.showFeedback(messageBox, `Transfer successful. Receipt: ${receipt}.`, 'success');
         transferForm.reset();
         await loadPageData();
 
         setTimeout(() => {
           window.location.href = 'transactions.html';
-        }, 1200);
+        }, 1000);
       } catch (error) {
         bank.showFeedback(messageBox, bank.getFriendlyError(error, 'Transfer failed.'), 'error');
       } finally {
@@ -262,8 +278,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   loadPageData()
-    .then(({ freshUser }) => {
-      bank.startStatusWatcher(freshUser.account_number);
+    .then((payload) => {
+      if (!payload) return;
+      bank.startStatusWatcher(payload.freshUser.account_number);
       refreshTimer = window.setInterval(() => {
         loadPageData().catch((error) => console.error(error));
       }, 12000);

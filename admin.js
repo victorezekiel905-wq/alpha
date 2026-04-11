@@ -3,7 +3,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (!bank) return;
 
   const session = bank.getSession();
-  if (!session || session.role !== 'admin') return;
+  if (!session || session.role !== 'admin' || localStorage.getItem('admin') !== 'true') return;
 
   const adminMessage = document.getElementById('adminMessage');
   const createUserForm = document.getElementById('adminCreateUserForm');
@@ -11,8 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const transactionsTable = document.getElementById('adminTransactionsTable');
 
   const statusBadge = (status) => `<span class="status-badge ${bank.escapeHtml(status)}">${bank.escapeHtml(status)}</span>`;
-
-  const receiptBase = (value) => bank.getPrimaryReceiptBase(value || '');
+  const primaryReceipt = (value) => bank.getPrimaryReceiptBase(value || '');
+  const secondaryReceipt = (value) => `${primaryReceipt(value)}-CR`;
 
   const renderUsers = (users) => {
     if (!usersTable) return;
@@ -39,7 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
               <td>${bank.escapeHtml(user.username || 'Pending Registration')}</td>
               <td class="receipt-text">${bank.escapeHtml(user.account_number)}</td>
               <td>${bank.escapeHtml(user.currency || 'USD')}</td>
-              <td>${bank.formatCurrency(user.balance, user.currency)}</td>
+              <td>${bank.formatCurrency(user.balance, user.currency || 'USD')}</td>
               <td>${statusBadge(user.username && user.password ? 'active' : 'pending')}</td>
             </tr>
           `).join('')}
@@ -65,6 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <th>Amount</th>
             <th>Sender</th>
             <th>Receiver</th>
+            <th>Type</th>
             <th>Status</th>
             <th>Actions</th>
           </tr>
@@ -72,7 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <tbody>
           ${transactions.map((transaction) => {
             const type = String(transaction.transaction_type || '').toLowerCase();
-            const isPrimaryDebit = type === 'debit';
+            const isPrimaryDebit = type === 'debit' && !String(transaction.receipt || '').endsWith('-CR');
             return `
               <tr>
                 <td>${bank.formatDate(transaction.created_at || transaction.date)}</td>
@@ -80,14 +81,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${bank.formatCurrency(transaction.amount, transaction.currency || 'USD')}</td>
                 <td>${bank.escapeHtml(transaction.sender_account || '-')}</td>
                 <td>${bank.escapeHtml(transaction.receiver_account || '-')}</td>
+                <td>${bank.escapeHtml(type || '-')}</td>
                 <td>${statusBadge(transaction.status || 'pending')}</td>
                 <td>
                   ${isPrimaryDebit ? `
                     <div class="action-group">
-                      <button class="btn btn-primary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="success">Approve</button>
+                      <button class="btn btn-primary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="success">Success</button>
                       <button class="btn btn-secondary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="pending">Pending</button>
-                      <button class="btn btn-secondary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="disapproved">Disapprove</button>
                       <button class="btn btn-secondary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="failed">Failed</button>
+                      <button class="btn btn-secondary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="disapproved">Disapproved</button>
                     </div>
                   ` : '<span class="muted-small">Read only</span>'}
                 </td>
@@ -111,138 +113,86 @@ document.addEventListener('DOMContentLoaded', () => {
     renderUsers(users);
     renderTransactions(transactions);
 
-    return { reserve, users, transactions };
+    return { users, transactions };
   };
 
-  const createRefundIfNeeded = async (transaction) => {
-    const refundReceipt = `${receiptBase(transaction.receipt)}-RF`;
-    const existingRefund = await bank.fetchTransactionByReceipt(refundReceipt);
-    if (existingRefund) return existingRefund;
-
-    const sender = await bank.fetchUserByAccountNumber(transaction.sender_account);
-    if (!sender) throw new Error('Sender account not found for refund.');
-
-    const charges = bank.calculateCharges(transaction.amount || 0);
-    await bank.updateUserByAccountNumber(sender.account_number, {
-      balance: bank.roundMoney(Number(sender.balance || 0) + charges.totalDebit)
-    });
-
-    return bank.insertRow({
-      username: sender.username || '',
-      password: '',
-      account_number: '',
-      balance: null,
-      currency: sender.currency,
-      amount: charges.totalDebit,
-      sender_account: bank.APP.reserveAccountNumber,
-      receiver_account: sender.account_number,
-      transaction_type: 'credit',
-      status: 'success',
-      receipt: refundReceipt
-    });
-  };
-
-  const applyApprovalCredit = async (transaction, creditReceipt, existingCredit) => {
-    const receiver = await bank.fetchUserByAccountNumber(transaction.receiver_account);
-    if (!receiver) throw new Error('Receiver account not found.');
-
-    const reserve = await bank.ensureBankReserve();
-    const charges = bank.calculateCharges(transaction.amount || 0);
-    const reserveBalance = bank.roundMoney(Number(reserve.balance || 0) - charges.totalDebit);
-
-    await bank.updateUserByAccountNumber(reserve.account_number, {
-      balance: reserveBalance
-    });
-
-    await bank.updateUserByAccountNumber(receiver.account_number, {
-      balance: bank.roundMoney(Number(receiver.balance || 0) + Number(transaction.amount || 0))
-    });
-
-    if (existingCredit) {
-      await bank.updateTransactionByReceipt(creditReceipt, { status: 'success' });
-      return;
+  const setMirroredStatus = async (creditReceipt, payload, transaction) => {
+    const mirror = await bank.fetchTransactionByReceipt(creditReceipt);
+    if (mirror) {
+      await bank.updateTransactionByReceipt(creditReceipt, payload);
+      return mirror;
     }
 
-    await bank.insertRow({
-      username: receiver.username || '',
-      password: '',
-      account_number: '',
-      balance: null,
-      currency: receiver.currency,
-      amount: bank.roundMoney(transaction.amount || 0),
-      sender_account: transaction.sender_account,
-      receiver_account: receiver.account_number,
-      transaction_type: 'credit',
-      status: 'success',
-      receipt: creditReceipt
-    });
-  };
-
-  const reverseApprovalIfNeeded = async (transaction, nextStatus) => {
-    const creditReceipt = `${receiptBase(transaction.receipt)}-CR`;
-    const existingCredit = await bank.fetchTransactionByReceipt(creditReceipt);
-
-    if (!existingCredit || String(existingCredit.status || '').toLowerCase() !== 'success') {
-      return;
-    }
-
-    const receiver = await bank.fetchUserByAccountNumber(transaction.receiver_account);
-    const reserve = await bank.ensureBankReserve();
-    const charges = bank.calculateCharges(transaction.amount || 0);
-
-    if (receiver) {
-      await bank.updateUserByAccountNumber(receiver.account_number, {
-        balance: bank.roundMoney(Number(receiver.balance || 0) - Number(transaction.amount || 0))
+    if (payload.status === 'success') {
+      await bank.insertRow({
+        username: '',
+        password: '',
+        account_number: '',
+        balance: null,
+        currency: transaction.currency || 'USD',
+        amount: bank.roundMoney(transaction.amount || 0),
+        sender_account: transaction.sender_account,
+        receiver_account: transaction.receiver_account,
+        transaction_type: 'credit',
+        status: 'success',
+        receipt: creditReceipt
       });
     }
 
-    await bank.updateUserByAccountNumber(reserve.account_number, {
-      balance: bank.roundMoney(Number(reserve.balance || 0) + charges.totalDebit)
-    });
-
-    await bank.updateTransactionByReceipt(creditReceipt, { status: nextStatus });
-  };
-
-  const approveTransaction = async (transaction) => {
-    const creditReceipt = `${receiptBase(transaction.receipt)}-CR`;
-    const refundReceipt = `${receiptBase(transaction.receipt)}-RF`;
-    const existingCredit = await bank.fetchTransactionByReceipt(creditReceipt);
-    const existingRefund = await bank.fetchTransactionByReceipt(refundReceipt);
-
-    if (existingRefund) {
-      throw new Error('Refunded transactions cannot be approved again.');
-    }
-
-    await bank.updateTransactionByReceipt(transaction.receipt, { status: 'success' });
-
-    if (existingCredit && String(existingCredit.status || '').toLowerCase() === 'success') {
-      return;
-    }
-
-    await applyApprovalCredit(transaction, creditReceipt, existingCredit);
+    return null;
   };
 
   const changeTransactionStatus = async (receipt, nextStatus) => {
     const transaction = await bank.fetchTransactionByReceipt(receipt);
-    if (!transaction) {
-      throw new Error('Transaction not found.');
-    }
-
+    if (!transaction) throw new Error('Transaction not found.');
     if (String(transaction.transaction_type || '').toLowerCase() !== 'debit') {
-      throw new Error('Only primary debit transactions can be managed here.');
+      throw new Error('Only debit transactions can be updated.');
     }
 
-    if (nextStatus === 'success') {
-      await approveTransaction(transaction);
-      return;
+    const currentStatus = String(transaction.status || 'success').toLowerCase();
+    const receiver = await bank.fetchUserByAccountNumber(transaction.receiver_account);
+    const sender = await bank.fetchUserByAccountNumber(transaction.sender_account);
+    const amount = bank.roundMoney(transaction.amount || 0);
+    const creditReceipt = secondaryReceipt(receipt);
+
+    if (!receiver || !sender) {
+      throw new Error('Associated user account could not be found.');
     }
+
+    const wasSuccess = currentStatus === 'success';
+    const willBeSuccess = nextStatus === 'success';
+    const senderHadFundsHeld = currentStatus === 'success' || currentStatus === 'pending';
+    const nextHoldsFunds = nextStatus === 'success' || nextStatus === 'pending';
+
+    let senderBalance = Number(sender.balance || 0);
+    let receiverBalance = Number(receiver.balance || 0);
+
+    if (wasSuccess && !willBeSuccess) {
+      receiverBalance -= amount;
+    }
+
+    if (!wasSuccess && willBeSuccess) {
+      receiverBalance += amount;
+    }
+
+    if (senderHadFundsHeld && !nextHoldsFunds) {
+      senderBalance += amount;
+    }
+
+    if (!senderHadFundsHeld && nextHoldsFunds) {
+      senderBalance -= amount;
+    }
+
+    await bank.updateUserByAccountNumber(sender.account_number, {
+      balance: bank.roundMoney(senderBalance)
+    });
+
+    await bank.updateUserByAccountNumber(receiver.account_number, {
+      balance: bank.roundMoney(receiverBalance)
+    });
 
     await bank.updateTransactionByReceipt(receipt, { status: nextStatus });
-    await reverseApprovalIfNeeded(transaction, nextStatus);
-
-    if (nextStatus === 'failed' || nextStatus === 'disapproved') {
-      await createRefundIfNeeded(transaction);
-    }
+    await setMirroredStatus(creditReceipt, { status: nextStatus }, transaction);
   };
 
   if (createUserForm) {
@@ -298,7 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
         button.disabled = true;
         bank.hideFeedback(adminMessage);
         await changeTransactionStatus(receipt, action);
-        bank.showFeedback(adminMessage, 'Transaction updated successfully.', 'success');
+        bank.showFeedback(adminMessage, bank.getNotificationMessage(action), action === 'failed' || action === 'disapproved' ? 'error' : 'success');
         await loadAdminData();
       } catch (error) {
         bank.showFeedback(adminMessage, bank.getFriendlyError(error, 'Unable to update transaction.'), 'error');

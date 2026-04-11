@@ -59,7 +59,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (submitButton) submitButton.disabled = true;
 
         const assignedAccount = await bank.fetchUserByAccountNumber(accountNumber);
-        if (!assignedAccount || bank.isSystemAccount(assignedAccount)) {
+        if (!assignedAccount) {
           bank.showFeedback(toast, 'Account number not found. Please contact admin.', 'error');
           return;
         }
@@ -70,9 +70,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const users = await bank.fetchVisibleUsers();
-        const usernameExists = users.some(
-          (user) => user.username && user.username.toLowerCase() === username.toLowerCase() && user.account_number !== accountNumber
-        );
+        const usernameExists = users.some((user) => {
+          return String(user.username || '').toLowerCase() === username.toLowerCase() && user.account_number !== accountNumber;
+        });
 
         if (usernameExists) {
           bank.showFeedback(toast, 'Username already exists. Please use another one.', 'error');
@@ -88,7 +88,10 @@ document.addEventListener('DOMContentLoaded', () => {
           isLoggedIn: true,
           role: 'customer',
           username: updatedUser.username,
-          accountNumber: updatedUser.account_number
+          accountNumber: updatedUser.account_number,
+          balance: updatedUser.balance,
+          currency: updatedUser.currency,
+          user: updatedUser
         });
         bank.clearStatusCache();
         bank.showFeedback(toast, 'Account registered successfully. Redirecting...', 'success');
@@ -110,17 +113,21 @@ document.addEventListener('DOMContentLoaded', () => {
       event.preventDefault();
       bank.hideFeedback(toast);
 
-      const username = document.getElementById('loginUsername').value.trim();
+      const identifier = document.getElementById('loginUsername').value.trim();
       const password = document.getElementById('loginPassword').value.trim();
       const submitButton = loginForm.querySelector('button[type="submit"]');
 
-      if (!username || !password) {
-        bank.showFeedback(toast, 'Enter your username and password.', 'error');
+      if (!identifier || !password) {
+        bank.showFeedback(toast, 'Enter your login details.', 'error');
         return;
       }
 
-      if (username === bank.APP.adminUsername && password === bank.APP.adminPassword) {
-        bank.setSession({ isLoggedIn: true, role: 'admin', username });
+      if (identifier.toLowerCase() === bank.APP.adminEmail.toLowerCase() && password === bank.APP.adminPassword) {
+        bank.setSession({
+          isLoggedIn: true,
+          role: 'admin',
+          username: bank.APP.adminEmail
+        });
         bank.showFeedback(toast, 'Login successful. Redirecting...', 'success');
         loginForm.reset();
 
@@ -132,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       try {
         if (submitButton) submitButton.disabled = true;
-        const matchedUser = await bank.fetchUserByCredentials(username, password);
+        const matchedUser = await bank.fetchUserByCredentials(identifier, password);
 
         if (!matchedUser) {
           bank.showFeedback(toast, 'Invalid username or password.', 'error');
@@ -143,7 +150,10 @@ document.addEventListener('DOMContentLoaded', () => {
           isLoggedIn: true,
           role: 'customer',
           username: matchedUser.username,
-          accountNumber: matchedUser.account_number
+          accountNumber: matchedUser.account_number,
+          balance: matchedUser.balance,
+          currency: matchedUser.currency,
+          user: matchedUser
         });
         bank.clearStatusCache();
         bank.showFeedback(toast, 'Login successful. Redirecting...', 'success');

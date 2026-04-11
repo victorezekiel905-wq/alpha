@@ -1,23 +1,20 @@
 (function () {
   const APP = {
-    tableName: 'bank_system',
+    tableName: 'alpha',
     sessionKey: 'alphaBankSession',
+    userStorageKey: 'user',
+    adminStorageKey: 'admin',
     statusCacheKey: 'alphaBankStatusCache',
-    adminUsername: 'admin',
-    adminPassword: 'admin123',
-    reserveAccountNumber: '0000000001',
-    reserveUsername: '__bank_reserve__',
-    reserveSeedBalance: 1000000000,
-    charges: {
-      taxRate: 0.005,
-      feeRate: 0.002
-    },
+    adminEmail: 'alpha@gmail.com',
+    adminPassword: 'Alpha@2026',
     currencies: {
-      USD: { code: 'USD', locale: 'en-US', label: 'Dollars' },
-      EUR: { code: 'EUR', locale: 'de-DE', label: 'Euro' },
-      GBP: { code: 'GBP', locale: 'en-GB', label: 'Pounds' }
+      USD: { code: 'USD', locale: 'en-US' },
+      EUR: { code: 'EUR', locale: 'de-DE' },
+      GBP: { code: 'GBP', locale: 'en-GB' }
     }
   };
+
+  let schemaCache = null;
 
   const safeParse = (value, fallback) => {
     try {
@@ -27,13 +24,41 @@
     }
   };
 
-  const getClient = () => window.AlphaBankSupabase?.client || null;
+  const getClient = () => window.AlphaBankSupabase || window.alphaSupabase || null;
   const getSession = () => safeParse(localStorage.getItem(APP.sessionKey), null);
-  const setSession = (session) => localStorage.setItem(APP.sessionKey, JSON.stringify(session));
-  const clearSession = () => localStorage.removeItem(APP.sessionKey);
+  const getStoredUser = () => safeParse(localStorage.getItem(APP.userStorageKey), null);
   const getStatusCache = () => safeParse(localStorage.getItem(APP.statusCacheKey), {});
   const setStatusCache = (value) => localStorage.setItem(APP.statusCacheKey, JSON.stringify(value || {}));
   const clearStatusCache = () => localStorage.removeItem(APP.statusCacheKey);
+
+  const setSession = (session) => {
+    const normalized = session || null;
+    if (!normalized) {
+      localStorage.removeItem(APP.sessionKey);
+      return;
+    }
+
+    localStorage.setItem(APP.sessionKey, JSON.stringify(normalized));
+
+    if (normalized.role === 'admin') {
+      localStorage.setItem(APP.adminStorageKey, true);
+      localStorage.removeItem(APP.userStorageKey);
+    } else if (normalized.role === 'customer') {
+      localStorage.removeItem(APP.adminStorageKey);
+      localStorage.setItem(APP.userStorageKey, JSON.stringify(normalized.user || {
+        username: normalized.username || '',
+        account_number: normalized.accountNumber || '',
+        balance: normalized.balance || 0,
+        currency: normalized.currency || 'USD'
+      }));
+    }
+  };
+
+  const clearSession = () => {
+    localStorage.removeItem(APP.sessionKey);
+    localStorage.removeItem(APP.userStorageKey);
+    localStorage.removeItem(APP.adminStorageKey);
+  };
 
   const roundMoney = (value) => Number((Number(value || 0)).toFixed(2));
 
@@ -75,32 +100,17 @@
   });
 
   const calculateCharges = (amount) => {
-    const baseAmount = roundMoney(amount);
-    const tax = roundMoney(baseAmount * APP.charges.taxRate);
-    const fee = roundMoney(baseAmount * APP.charges.feeRate);
-    const totalCharges = roundMoney(tax + fee);
+    const cleanAmount = roundMoney(amount);
     return {
-      amount: baseAmount,
-      tax,
-      fee,
-      totalCharges,
-      totalDebit: roundMoney(baseAmount + totalCharges)
+      amount: cleanAmount,
+      tax: 0,
+      fee: 0,
+      totalCharges: 0,
+      totalDebit: cleanAmount
     };
   };
 
-  const generateReceipt = () => `RCPT-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
-
-  const generateAccountNumber = async () => {
-    const existingUsers = await fetchAllUsers();
-    const existingAccounts = new Set(existingUsers.map((user) => String(user.account_number || '')));
-    let accountNumber = '';
-
-    do {
-      accountNumber = `${Math.floor(1000000000 + Math.random() * 9000000000)}`;
-    } while (existingAccounts.has(accountNumber) || accountNumber === APP.reserveAccountNumber);
-
-    return accountNumber;
-  };
+  const generateReceipt = () => `TXN-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
   const setText = (selector, value) => {
     const element = document.querySelector(selector);
@@ -148,8 +158,7 @@
   const togglePasswordButtons = () => {
     document.querySelectorAll('.toggle-password').forEach((button) => {
       button.addEventListener('click', () => {
-        const targetId = button.dataset.target;
-        const input = document.getElementById(targetId);
+        const input = document.getElementById(button.dataset.target);
         if (!input) return;
         const isPassword = input.type === 'password';
         input.type = isPassword ? 'text' : 'password';
@@ -161,22 +170,55 @@
   const getFriendlyError = (error, fallback = 'Something went wrong. Please try again.') => {
     if (!error) return fallback;
     const message = error.message || String(error);
-    if (message.includes('schema cache') || message.includes('Could not find the table')) {
-      return 'Supabase table bank_system is not available yet.';
+    if (message.includes('Could not find the table') || message.includes('schema cache')) {
+      return 'Supabase table alpha is not available yet.';
     }
     return message;
   };
 
-  const isSystemAccount = (row) => String(row?.account_number || '') === APP.reserveAccountNumber || String(row?.username || '') === APP.reserveUsername;
-
-  const sanitizeUser = (row) => ({
+  const sanitizeUser = (row = {}) => ({
     ...row,
-    username: row?.username || '',
-    password: row?.password || '',
-    account_number: String(row?.account_number || ''),
-    balance: roundMoney(row?.balance),
-    currency: row?.currency || 'USD'
+    username: row.username || row.user_name || row.email || '',
+    password: row.password || '',
+    account_number: String(row.account_number || ''),
+    balance: roundMoney(row.balance),
+    currency: row.currency || 'USD'
   });
+
+  const normalizeUserName = (row = {}) => String(row.username || row.user_name || row.email || '').trim();
+  const isAdminSession = () => localStorage.getItem(APP.adminStorageKey) === 'true';
+
+  async function detectSchema() {
+    if (schemaCache) return schemaCache;
+    const client = getClient();
+    if (!client) throw new Error('Supabase client is not initialized.');
+
+    const { data, error } = await client
+      .from(APP.tableName)
+      .select('*')
+      .limit(1);
+
+    if (error && !String(error.message || '').includes('Results contain 0 rows')) throw error;
+
+    const sample = Array.isArray(data) ? data[0] : null;
+    schemaCache = {
+      usernameField: sample && Object.prototype.hasOwnProperty.call(sample, 'user_name') && !Object.prototype.hasOwnProperty.call(sample, 'username')
+        ? 'user_name'
+        : 'username'
+    };
+
+    return schemaCache;
+  }
+
+  function applySchemaToPayload(payload, schema) {
+    const nextPayload = { ...payload };
+    if (Object.prototype.hasOwnProperty.call(nextPayload, 'username')) {
+      const usernameValue = nextPayload.username;
+      delete nextPayload.username;
+      nextPayload[schema.usernameField] = usernameValue;
+    }
+    return nextPayload;
+  }
 
   async function querySingle(builder) {
     const { data, error } = await builder.limit(1);
@@ -187,6 +229,7 @@
   async function fetchAllUsers() {
     const client = getClient();
     if (!client) throw new Error('Supabase client is not initialized.');
+
     const { data, error } = await client
       .from(APP.tableName)
       .select('*')
@@ -197,8 +240,7 @@
   }
 
   async function fetchVisibleUsers() {
-    const users = await fetchAllUsers();
-    return users.filter((user) => !isSystemAccount(user));
+    return fetchAllUsers();
   }
 
   async function fetchUserByAccountNumber(accountNumber) {
@@ -216,30 +258,27 @@
     return row ? sanitizeUser(row) : null;
   }
 
-  async function fetchUserByCredentials(username, password) {
-    const client = getClient();
-    if (!client) throw new Error('Supabase client is not initialized.');
+  async function fetchUserByCredentials(identifier, password) {
+    const users = await fetchAllUsers();
+    const normalizedIdentifier = String(identifier || '').trim().toLowerCase();
+    const normalizedPassword = String(password || '');
 
-    const row = await querySingle(
-      client
-        .from(APP.tableName)
-        .select('*')
-        .eq('username', username)
-        .eq('password', password)
-        .is('transaction_type', null)
-    );
-
-    if (!row || isSystemAccount(row)) return null;
-    return sanitizeUser(row);
+    return users.find((user) => {
+      const username = normalizeUserName(user).toLowerCase();
+      const email = String(user.email || '').trim().toLowerCase();
+      return (username === normalizedIdentifier || email === normalizedIdentifier) && String(user.password || '') === normalizedPassword;
+    }) || null;
   }
 
   async function updateUserByAccountNumber(accountNumber, payload) {
     const client = getClient();
     if (!client) throw new Error('Supabase client is not initialized.');
+    const schema = await detectSchema();
+    const updatePayload = applySchemaToPayload(payload, schema);
 
     const { data, error } = await client
       .from(APP.tableName)
-      .update(payload)
+      .update(updatePayload)
       .eq('account_number', String(accountNumber || ''))
       .is('transaction_type', null)
       .select('*')
@@ -252,10 +291,12 @@
   async function insertRow(payload) {
     const client = getClient();
     if (!client) throw new Error('Supabase client is not initialized.');
+    const schema = await detectSchema();
+    const insertPayload = applySchemaToPayload(payload, schema);
 
     const { data, error } = await client
       .from(APP.tableName)
-      .insert(payload)
+      .insert(insertPayload)
       .select('*')
       .limit(1);
 
@@ -295,14 +336,12 @@
     const client = getClient();
     if (!client) throw new Error('Supabase client is not initialized.');
 
-    const row = await querySingle(
+    return querySingle(
       client
         .from(APP.tableName)
         .select('*')
         .eq('receipt', receiptValue)
     );
-
-    return row || null;
   }
 
   async function updateTransactionByReceipt(receiptValue, payload) {
@@ -319,32 +358,46 @@
     return data || [];
   }
 
-  async function ensureBankReserve() {
-    let reserve = await fetchUserByAccountNumber(APP.reserveAccountNumber);
-    if (reserve) return reserve;
-
-    await insertRow({
-      username: APP.reserveUsername,
-      password: '',
-      account_number: APP.reserveAccountNumber,
-      balance: APP.reserveSeedBalance,
-      currency: 'USD',
-      transaction_type: null,
-      status: null,
-      receipt: null
-    });
-
-    reserve = await fetchUserByAccountNumber(APP.reserveAccountNumber);
-    return reserve;
-  }
-
   async function fetchCurrentUser() {
     const session = getSession();
     if (!session || session.role !== 'customer' || !session.accountNumber) return null;
-    return fetchUserByAccountNumber(session.accountNumber);
+    const freshUser = await fetchUserByAccountNumber(session.accountNumber);
+    if (freshUser) {
+      setSession({
+        ...session,
+        username: freshUser.username,
+        accountNumber: freshUser.account_number,
+        balance: freshUser.balance,
+        currency: freshUser.currency,
+        user: freshUser
+      });
+    }
+    return freshUser;
   }
 
-  const getCurrentPage = () => (window.location.pathname.split('/').pop() || 'index.html');
+  async function generateAccountNumber() {
+    const users = await fetchAllUsers();
+    const existing = new Set(users.map((user) => String(user.account_number || '')));
+    let accountNumber = '';
+
+    do {
+      accountNumber = `${Math.floor(1000000000 + Math.random() * 9000000000)}`;
+    } while (existing.has(accountNumber));
+
+    return accountNumber;
+  }
+
+  async function ensureBankReserve() {
+    const users = await fetchVisibleUsers();
+    const total = users.reduce((sum, user) => sum + Number(user.balance || 0), 0);
+    return {
+      account_number: 'BANK',
+      balance: roundMoney(total),
+      currency: 'USD'
+    };
+  }
+
+  const getCurrentPage = () => window.location.pathname.split('/').pop() || 'index.html';
 
   const requireAuth = () => {
     const session = getSession();
@@ -353,25 +406,25 @@
     const page = getCurrentPage();
 
     if (page === 'index.html' || page === '') {
-      if (session?.role === 'admin') {
+      if (isAdminSession() || session?.role === 'admin') {
         window.location.replace('admin.html');
         return;
       }
-      if (session?.role === 'customer') {
+      if (session?.role === 'customer' && getStoredUser()) {
         window.location.replace('dashboard.html');
       }
       return;
     }
 
     if (isAdminPage) {
-      if (!session || session.role !== 'admin') {
+      if (!(isAdminSession() || session?.role === 'admin')) {
         window.location.replace('index.html');
       }
       return;
     }
 
     if (isProtected) {
-      if (!session || session.role !== 'customer') {
+      if (!session || session.role !== 'customer' || isAdminSession()) {
         window.location.replace('index.html');
       }
     }
@@ -387,58 +440,36 @@
     });
   };
 
-  const getPrimaryReceiptBase = (receipt) => String(receipt || '').replace(/-CR$|-RF$/g, '');
+  const getPrimaryReceiptBase = (receipt) => String(receipt || '').replace(/-CR$/g, '');
 
   const getPrimaryTransactionsForCustomer = (transactions, accountNumber) => {
     const account = String(accountNumber || '');
-    const creditReceipts = new Set(
+    const successCredits = new Set(
       transactions
-        .filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'credit' && String(txn.receipt || '').endsWith('-CR'))
-        .map((txn) => getPrimaryReceiptBase(txn.receipt))
-    );
-
-    const refundReceipts = new Set(
-      transactions
-        .filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'credit' && String(txn.receipt || '').endsWith('-RF'))
+        .filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'credit')
         .map((txn) => getPrimaryReceiptBase(txn.receipt))
     );
 
     return sortTransactions(
       transactions.filter((txn) => {
         const type = String(txn.transaction_type || '').toLowerCase();
-        const receipt = String(txn.receipt || '');
-
-        if (type === 'credit' && txn.receiver_account === account) return true;
-        if (type === 'credit' && receipt.endsWith('-RF') && txn.receiver_account === account) return true;
-        if (type === 'debit' && txn.sender_account === account) return true;
-        if (type === 'debit' && txn.receiver_account === account && creditReceipts.has(receipt)) return false;
-        if (type === 'debit' && txn.receiver_account === account && refundReceipts.has(receipt)) return false;
+        const baseReceipt = getPrimaryReceiptBase(txn.receipt);
+        if (type === 'debit' && String(txn.sender_account || '') === account) return true;
+        if (type === 'credit' && String(txn.receiver_account || '') === account) return true;
+        if (type === 'debit' && String(txn.receiver_account || '') === account && !successCredits.has(baseReceipt)) return true;
         return false;
       })
     );
   };
 
-  const getDisplayStatus = (transaction, allTransactions, currentAccountNumber) => {
-    const rawStatus = String(transaction?.status || 'pending').toLowerCase();
-    const receipt = getPrimaryReceiptBase(transaction?.receipt || '');
-    const currentAccount = String(currentAccountNumber || '');
-    const hasApprovalCredit = allTransactions.some(
-      (item) => String(item.receipt || '') === `${receipt}-CR` && String(item.status || '').toLowerCase() === 'success'
-    );
-
-    if (String(transaction.transaction_type || '').toLowerCase() === 'debit' && transaction.sender_account === currentAccount) {
-      if (rawStatus === 'success' && !hasApprovalCredit) return 'pending';
-    }
-
-    return rawStatus;
-  };
+  const getDisplayStatus = (transaction) => String(transaction?.status || 'pending').toLowerCase();
 
   const getNotificationMessage = (status) => {
     const map = {
       success: 'Transfer Successful',
       pending: 'Transaction Pending',
-      disapproved: 'Transaction Declined',
-      failed: 'Transaction Failed'
+      failed: 'Transaction Failed',
+      disapproved: 'Transaction Declined'
     };
     return map[String(status || '').toLowerCase()] || 'Transaction Updated';
   };
@@ -449,25 +480,24 @@
 
     const syncStatuses = async (notify) => {
       try {
-        const allTransactions = await fetchTransactionsForAccount(accountNumber);
-        const outgoingPrimary = sortTransactions(
-          allTransactions.filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'debit' && txn.sender_account === String(accountNumber || ''))
-        );
-
+        const transactions = await fetchTransactionsForAccount(accountNumber);
+        const visible = getPrimaryTransactionsForCustomer(transactions, accountNumber);
         const currentCache = getStatusCache();
         const nextCache = { ...currentCache };
 
-        outgoingPrimary.forEach((transaction) => {
-          const derivedStatus = getDisplayStatus(transaction, allTransactions, accountNumber);
-          const cacheKey = getPrimaryReceiptBase(transaction.receipt);
-          const previousStatus = currentCache[cacheKey];
+        visible
+          .filter((txn) => String(txn.sender_account || '') === String(accountNumber || ''))
+          .forEach((transaction) => {
+            const status = getDisplayStatus(transaction);
+            const cacheKey = getPrimaryReceiptBase(transaction.receipt);
+            const previous = currentCache[cacheKey];
 
-          if (notify && previousStatus && previousStatus !== derivedStatus) {
-            showPopup(getNotificationMessage(derivedStatus), derivedStatus === 'disapproved' || derivedStatus === 'failed' ? 'error' : 'success');
-          }
+            if (notify && previous && previous !== status) {
+              showPopup(getNotificationMessage(status), status === 'failed' || status === 'disapproved' ? 'error' : 'success');
+            }
 
-          nextCache[cacheKey] = derivedStatus;
-        });
+            nextCache[cacheKey] = status;
+          });
 
         setStatusCache(nextCache);
       } catch (error) {
@@ -485,12 +515,14 @@
     getSession,
     setSession,
     clearSession,
+    getStoredUser,
     getStatusCache,
     setStatusCache,
     clearStatusCache,
+    roundMoney,
     formatCurrency,
     formatDate,
-    roundMoney,
+    sortTransactions,
     calculateCharges,
     generateReceipt,
     generateAccountNumber,
@@ -501,26 +533,25 @@
     togglePasswordButtons,
     getFriendlyError,
     escapeHtml,
+    sanitizeUser,
     fetchAllUsers,
     fetchVisibleUsers,
     fetchUserByAccountNumber,
     fetchUserByCredentials,
-    fetchCurrentUser,
     updateUserByAccountNumber,
+    insertRow,
     fetchTransactionsForAccount,
     fetchAllTransactions,
     fetchTransactionByReceipt,
     updateTransactionByReceipt,
-    insertRow,
+    fetchCurrentUser,
     ensureBankReserve,
     requireAuth,
     setupLogout,
+    getPrimaryReceiptBase,
     getPrimaryTransactionsForCustomer,
     getDisplayStatus,
     getNotificationMessage,
-    sortTransactions,
-    getPrimaryReceiptBase,
-    isSystemAccount,
     getCurrencyConfig,
     startStatusWatcher
   };
