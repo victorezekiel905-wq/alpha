@@ -47,7 +47,7 @@
       <section class="hero-card glass-card">
         <div>
           <p class="eyebrow">Available Balance</p>
-          <h2 id="dashboardBalance">₦0.00</h2>
+          <h2 id="dashboardBalance">$0.00</h2>
           <p class="muted">Account Number: <span id="dashboardAccountNumber">0000000000</span></p>
         </div>
         <div class="hero-chip">
@@ -60,7 +60,7 @@
           <span class="mini-stat-icon">💼</span>
           <div>
             <p>Total Balance</p>
-            <h3 id="miniBalance">₦0.00</h3>
+            <h3 id="miniBalance">$0.00</h3>
           </div>
         </article>
 
@@ -68,7 +68,7 @@
           <span class="mini-stat-icon">📈</span>
           <div>
             <p>Total Credits</p>
-            <h3 id="totalCredits">₦0.00</h3>
+            <h3 id="totalCredits">$0.00</h3>
           </div>
         </article>
 
@@ -76,7 +76,7 @@
           <span class="mini-stat-icon">📉</span>
           <div>
             <p>Total Debits</p>
-            <h3 id="totalDebits">₦0.00</h3>
+            <h3 id="totalDebits">$0.00</h3>
           </div>
         </article>
       </section>
@@ -109,12 +109,12 @@
             <a href="transactions.html" class="quick-action-card">
               <span>🧾</span>
               <strong>History</strong>
-              <p>Review all credit and debit activity.</p>
+              <p>Review every credit and debit status.</p>
             </a>
             <a href="profile.html" class="quick-action-card">
               <span>👤</span>
               <strong>Profile</strong>
-              <p>Manage account identity and access.</p>
+              <p>Review your account identity and balance.</p>
             </a>
           </div>
         </article>
@@ -122,6 +122,8 @@
     </main>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
   <script src="script.js"></script>
   <script src="auth.js"></script>
   <script src="transactions.js"></script>

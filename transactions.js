@@ -2,28 +2,62 @@ document.addEventListener('DOMContentLoaded', () => {
   const bank = window.AlphaBank;
   if (!bank) return;
 
-  const currentUser = bank.getCurrentUser();
-  if (!currentUser) return;
+  const session = bank.getSession();
+  if (!session || session.role !== 'customer') return;
 
-  const renderDashboard = () => {
-    const recentTransactions = [...(currentUser.transactions || [])]
-      .sort((a, b) => new Date(b.date) - new Date(a.date))
-      .slice(0, 5);
+  const transferForm = document.getElementById('transferForm');
+  const messageBox = document.getElementById('transferMessage');
+  const isTransferPage = Boolean(transferForm);
+  let refreshTimer = null;
 
-    const totalCreditsValue = (currentUser.transactions || [])
-      .filter((txn) => txn.type === 'Credit')
-      .reduce((sum, txn) => sum + Number(txn.amount), 0);
+  const transactionDirection = (transaction, currentAccountNumber) => {
+    const isOutgoing = transaction.sender_account === currentAccountNumber && String(transaction.transaction_type || '').toLowerCase() === 'debit';
+    const isRefund = String(transaction.receipt || '').endsWith('-RF');
 
-    const totalDebitsValue = (currentUser.transactions || [])
-      .filter((txn) => txn.type === 'Debit')
-      .reduce((sum, txn) => sum + Number(txn.amount), 0);
+    if (isRefund) {
+      return {
+        label: 'Refund',
+        typeClass: 'type-credit',
+        amountClass: 'amount-credit',
+        prefix: '+'
+      };
+    }
 
-    bank.setText('[data-user-name]', currentUser.username);
-    bank.setText('#dashboardAccountNumber', currentUser.accountNumber);
-    bank.setText('#dashboardBalance', bank.formatCurrency(currentUser.balance));
-    bank.setText('#miniBalance', bank.formatCurrency(currentUser.balance));
-    bank.setText('#totalCredits', bank.formatCurrency(totalCreditsValue));
-    bank.setText('#totalDebits', bank.formatCurrency(totalDebitsValue));
+    if (isOutgoing) {
+      return {
+        label: 'Debit',
+        typeClass: 'type-debit',
+        amountClass: 'amount-debit',
+        prefix: '-'
+      };
+    }
+
+    return {
+      label: 'Credit',
+      typeClass: 'type-credit',
+      amountClass: 'amount-credit',
+      prefix: '+'
+    };
+  };
+
+  const statusBadge = (status) => `<span class="status-badge ${bank.escapeHtml(status)}">${bank.escapeHtml(status)}</span>`;
+
+  const renderDashboard = (user, transactions) => {
+    const recentTransactions = transactions.slice(0, 5);
+    const totalCreditsValue = transactions
+      .filter((txn) => transactionDirection(txn, user.account_number).label !== 'Debit')
+      .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
+
+    const totalDebitsValue = transactions
+      .filter((txn) => transactionDirection(txn, user.account_number).label === 'Debit')
+      .reduce((sum, txn) => sum + bank.calculateCharges(txn.amount || 0).totalDebit, 0);
+
+    bank.setText('[data-user-name]', user.username || 'Customer');
+    bank.setText('#dashboardAccountNumber', user.account_number);
+    bank.setText('#dashboardBalance', bank.formatCurrency(user.balance, user.currency));
+    bank.setText('#miniBalance', bank.formatCurrency(user.balance, user.currency));
+    bank.setText('#totalCredits', bank.formatCurrency(totalCreditsValue, user.currency));
+    bank.setText('#totalDebits', bank.formatCurrency(totalDebitsValue, user.currency));
 
     const recentContainer = document.getElementById('recentTransactions');
     if (!recentContainer) return;
@@ -33,34 +67,34 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    recentContainer.innerHTML = recentTransactions
-      .map(
-        (txn) => `
-          <div class="transaction-item">
-            <div class="transaction-meta">
-              <div class="transaction-avatar">${txn.type === 'Credit' ? '⬇' : '⬆'}</div>
-              <div>
-                <strong>${txn.description || txn.type}</strong>
-                <p class="muted">${bank.formatDate(txn.date)}</p>
-              </div>
-            </div>
-            <div style="text-align:right;">
-              <span class="transaction-type ${txn.type === 'Credit' ? 'type-credit' : 'type-debit'}">${txn.type}</span>
-              <p class="${txn.type === 'Credit' ? 'amount-credit' : 'amount-debit'}" style="margin-top:8px;font-weight:700;">${txn.type === 'Credit' ? '+' : '-'}${bank.formatCurrency(txn.amount)}</p>
+    recentContainer.innerHTML = recentTransactions.map((txn) => {
+      const displayStatus = bank.getDisplayStatus(txn, transactions, user.account_number);
+      const direction = transactionDirection(txn, user.account_number);
+      const title = direction.label === 'Debit' ? 'Transfer Sent' : direction.label === 'Refund' ? 'Refund Received' : 'Transfer Received';
+
+      return `
+        <div class="transaction-item">
+          <div class="transaction-meta">
+            <div class="transaction-avatar">${direction.label === 'Debit' ? '⬆' : '⬇'}</div>
+            <div>
+              <strong>${title}</strong>
+              <p class="muted">${bank.formatDate(txn.created_at || txn.date)}</p>
+              <p class="muted-small">${bank.escapeHtml(txn.sender_account || '-')} → ${bank.escapeHtml(txn.receiver_account || '-')}</p>
             </div>
           </div>
-        `
-      )
-      .join('');
+          <div style="text-align:right;">
+            <span class="transaction-type ${direction.typeClass}">${direction.label}</span>
+            <div style="margin-top:8px;">${statusBadge(displayStatus)}</div>
+            <p class="${direction.amountClass}" style="margin-top:8px;font-weight:700;">${direction.prefix}${bank.formatCurrency(txn.amount, user.currency)}</p>
+          </div>
+        </div>
+      `;
+    }).join('');
   };
 
-  const renderTransactionsTable = () => {
+  const renderTransactionsTable = (user, transactions) => {
     const wrapper = document.getElementById('transactionsTableWrapper');
     if (!wrapper) return;
-
-    const transactions = [...(currentUser.transactions || [])].sort(
-      (a, b) => new Date(b.date) - new Date(a.date)
-    );
 
     if (!transactions.length) {
       wrapper.innerHTML = '<div class="empty-state">No transaction records available.</div>';
@@ -72,50 +106,70 @@ document.addEventListener('DOMContentLoaded', () => {
         <thead>
           <tr>
             <th>Date</th>
-            <th>Description</th>
+            <th>Receipt</th>
+            <th>Sender</th>
+            <th>Receiver</th>
             <th>Type</th>
-            <th>Recipient</th>
+            <th>Status</th>
             <th>Amount</th>
           </tr>
         </thead>
         <tbody>
-          ${transactions
-            .map(
-              (txn) => `
-                <tr>
-                  <td>${bank.formatDate(txn.date)}</td>
-                  <td>${txn.description || txn.type}</td>
-                  <td><span class="transaction-type ${txn.type === 'Credit' ? 'type-credit' : 'type-debit'}">${txn.type}</span></td>
-                  <td>${txn.recipientAccount || 'Self'}</td>
-                  <td class="${txn.type === 'Credit' ? 'amount-credit' : 'amount-debit'}">${txn.type === 'Credit' ? '+' : '-'}${bank.formatCurrency(txn.amount)}</td>
-                </tr>
-              `
-            )
-            .join('')}
+          ${transactions.map((txn) => {
+            const displayStatus = bank.getDisplayStatus(txn, transactions, user.account_number);
+            const direction = transactionDirection(txn, user.account_number);
+            return `
+              <tr>
+                <td>${bank.formatDate(txn.created_at || txn.date)}</td>
+                <td class="receipt-text">${bank.escapeHtml(txn.receipt || '-')}</td>
+                <td>${bank.escapeHtml(txn.sender_account || '-')}</td>
+                <td>${bank.escapeHtml(txn.receiver_account || '-')}</td>
+                <td><span class="transaction-type ${direction.typeClass}">${direction.label}</span></td>
+                <td>${statusBadge(displayStatus)}</td>
+                <td class="${direction.amountClass}">${direction.prefix}${bank.formatCurrency(txn.amount, user.currency)}</td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
       </table>
     `;
   };
 
-  const renderProfile = () => {
-    bank.setText('#profileUsername', currentUser.username);
-    bank.setText('#profileAccountNumber', currentUser.accountNumber);
-    bank.setText('#profileBalance', bank.formatCurrency(currentUser.balance));
-    bank.setText('#profileTransactionCount', String((currentUser.transactions || []).length));
+  const renderProfile = (user, transactions) => {
+    bank.setText('#profileUsername', user.username || '-');
+    bank.setText('#profileAccountNumber', user.account_number || '-');
+    bank.setText('#profileBalance', bank.formatCurrency(user.balance, user.currency));
+    bank.setText('#profileTransactionCount', String(transactions.length));
+    bank.setText('#profileCurrency', user.currency || 'USD');
   };
 
-  const handleTransfer = () => {
-    const transferForm = document.getElementById('transferForm');
+  const updateTransferBalance = (user) => {
     const balanceElement = document.getElementById('transferAvailableBalance');
-    const messageBox = document.getElementById('transferMessage');
-
     if (balanceElement) {
-      balanceElement.textContent = bank.formatCurrency(currentUser.balance);
+      balanceElement.textContent = bank.formatCurrency(user.balance, user.currency);
+    }
+  };
+
+  const loadPageData = async () => {
+    const freshUser = await bank.fetchCurrentUser();
+    if (!freshUser) {
+      bank.clearSession();
+      window.location.replace('index.html');
+      return;
     }
 
-    if (!transferForm) return;
+    const rawTransactions = await bank.fetchTransactionsForAccount(freshUser.account_number);
+    const userTransactions = bank.getPrimaryTransactionsForCustomer(rawTransactions, freshUser.account_number);
 
-    transferForm.addEventListener('submit', (event) => {
+    renderDashboard(freshUser, userTransactions);
+    renderTransactionsTable(freshUser, userTransactions);
+    renderProfile(freshUser, userTransactions);
+    updateTransferBalance(freshUser);
+    return { freshUser, userTransactions, rawTransactions };
+  };
+
+  if (isTransferPage) {
+    transferForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       bank.hideFeedback(messageBox);
 
@@ -123,6 +177,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const amountInput = document.getElementById('transferAmount');
       const recipientAccount = recipientAccountInput.value.trim();
       const amount = Number(amountInput.value);
+      const submitButton = transferForm.querySelector('button[type="submit"]');
 
       if (!recipientAccount || !amountInput.value.trim()) {
         bank.showFeedback(messageBox, 'Please fill in all transfer fields.', 'error');
@@ -134,45 +189,97 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      if (recipientAccount === currentUser.accountNumber) {
-        bank.showFeedback(messageBox, 'You cannot transfer to your own account number.', 'error');
-        return;
-      }
-
       if (Number.isNaN(amount) || amount <= 0) {
         bank.showFeedback(messageBox, 'Enter a valid transfer amount.', 'error');
         return;
       }
 
-      if (amount > Number(currentUser.balance)) {
-        bank.showFeedback(messageBox, 'Insufficient balance for this transfer.', 'error');
-        return;
+      try {
+        if (submitButton) submitButton.disabled = true;
+
+        const sender = await bank.fetchCurrentUser();
+        if (!sender) {
+          bank.clearSession();
+          window.location.replace('index.html');
+          return;
+        }
+
+        if (recipientAccount === sender.account_number) {
+          bank.showFeedback(messageBox, 'You cannot transfer to your own account number.', 'error');
+          return;
+        }
+
+        const receiver = await bank.fetchUserByAccountNumber(recipientAccount);
+        if (!receiver || bank.isSystemAccount(receiver)) {
+          bank.showFeedback(messageBox, 'Recipient account not found.', 'error');
+          return;
+        }
+
+        const charges = bank.calculateCharges(amount);
+        if (charges.totalDebit > Number(sender.balance || 0)) {
+          bank.showFeedback(messageBox, `Insufficient balance. Required: ${bank.formatCurrency(charges.totalDebit, sender.currency)}.`, 'error');
+          return;
+        }
+
+        const receipt = bank.generateReceipt();
+        const senderNewBalance = bank.roundMoney(Number(sender.balance) - charges.totalDebit);
+
+        await bank.insertRow({
+          username: sender.username || '',
+          password: '',
+          account_number: '',
+          balance: null,
+          currency: sender.currency,
+          amount: bank.roundMoney(amount),
+          sender_account: sender.account_number,
+          receiver_account: recipientAccount,
+          transaction_type: 'debit',
+          status: 'success',
+          receipt
+        });
+
+        await bank.updateUserByAccountNumber(sender.account_number, {
+          balance: senderNewBalance
+        });
+
+        bank.showFeedback(
+          messageBox,
+          `Transfer submitted. Receipt: ${receipt}. Total deduction: ${bank.formatCurrency(charges.totalDebit, sender.currency)}.`,
+          'success'
+        );
+        transferForm.reset();
+        await loadPageData();
+
+        setTimeout(() => {
+          window.location.href = 'transactions.html';
+        }, 1200);
+      } catch (error) {
+        bank.showFeedback(messageBox, bank.getFriendlyError(error, 'Transfer failed.'), 'error');
+      } finally {
+        if (submitButton) submitButton.disabled = false;
       }
-
-      currentUser.balance = Number((Number(currentUser.balance) - amount).toFixed(2));
-      currentUser.transactions = currentUser.transactions || [];
-      currentUser.transactions.push({
-        id: `txn-${Date.now()}`,
-        date: new Date().toISOString(),
-        amount,
-        type: 'Debit',
-        description: 'Transfer sent',
-        recipientAccount
-      });
-
-      bank.updateCurrentUser(currentUser);
-      bank.showFeedback(messageBox, 'Transfer successful. Redirecting to transactions...', 'success');
-      transferForm.reset();
-      if (balanceElement) balanceElement.textContent = bank.formatCurrency(currentUser.balance);
-
-      setTimeout(() => {
-        window.location.href = 'transactions.html';
-      }, 1000);
     });
-  };
+  }
 
-  renderDashboard();
-  renderTransactionsTable();
-  renderProfile();
-  handleTransfer();
+  loadPageData()
+    .then(({ freshUser }) => {
+      bank.startStatusWatcher(freshUser.account_number);
+      refreshTimer = window.setInterval(() => {
+        loadPageData().catch((error) => console.error(error));
+      }, 12000);
+    })
+    .catch((error) => {
+      const target = messageBox || document.getElementById('transactionsTableWrapper') || document.getElementById('recentTransactions');
+      if (target) {
+        if (target.id === 'transactionsTableWrapper' || target.id === 'recentTransactions') {
+          target.innerHTML = `<div class="empty-state">${bank.escapeHtml(bank.getFriendlyError(error, 'Unable to load account data.'))}</div>`;
+        } else {
+          bank.showFeedback(target, bank.getFriendlyError(error, 'Unable to load account data.'), 'error');
+        }
+      }
+    });
+
+  window.addEventListener('beforeunload', () => {
+    if (refreshTimer) window.clearInterval(refreshTimer);
+  });
 });

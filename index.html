@@ -26,21 +26,21 @@
           <span class="feature-icon">🔐</span>
           <div>
             <h3>Secure Access</h3>
-            <p>Local session protection with seamless access control.</p>
+            <p>Supabase-backed account access with admin-managed account activation.</p>
           </div>
         </div>
         <div class="feature-item">
           <span class="feature-icon">⚡</span>
           <div>
             <h3>Instant Transfers</h3>
-            <p>Send funds and track activity in real time.</p>
+            <p>Send funds and track every status update in real time.</p>
           </div>
         </div>
         <div class="feature-item">
           <span class="feature-icon">📊</span>
           <div>
             <h3>Live Dashboard</h3>
-            <p>See balances, recent activity, and profile insights instantly.</p>
+            <p>See balances, activity history, and account details instantly.</p>
           </div>
         </div>
       </div>
@@ -79,8 +79,13 @@
       <form id="registerForm" class="auth-form" autocomplete="off">
         <div class="form-header">
           <h2>Create account</h2>
-          <p>Open your Alpha Bank account in seconds.</p>
+          <p>Use the 10-digit account number issued by admin to activate your account.</p>
         </div>
+
+        <label class="input-group">
+          <span>Admin Account Number</span>
+          <input type="text" id="registerAccountNumber" maxlength="10" placeholder="Enter 10-digit account number" required />
+        </label>
 
         <label class="input-group">
           <span>Username</span>
@@ -108,6 +113,8 @@
     </section>
   </main>
 
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
   <script src="script.js"></script>
   <script src="auth.js"></script>
 </body>

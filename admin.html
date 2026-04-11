@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Alpha Bank | Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body class="app-body" data-admin-page="true">
+  <div class="app-layout">
+    <aside class="sidebar glass-card">
+      <div>
+        <div class="logo-block">
+          <div class="brand-badge">AB</div>
+          <div>
+            <p class="eyebrow">Alpha Bank</p>
+            <h2>Control Center</h2>
+          </div>
+        </div>
+
+        <nav class="nav-menu">
+          <a href="#adminOverview" class="nav-link active">Overview</a>
+          <a href="#adminCreateUser" class="nav-link">Create User</a>
+          <a href="#adminUsers" class="nav-link">View Users</a>
+          <a href="#adminTransactions" class="nav-link">Transactions</a>
+        </nav>
+      </div>
+
+      <button class="btn btn-secondary btn-block logout-btn">Logout</button>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar glass-card" id="adminOverview">
+        <div>
+          <p class="eyebrow">Admin Dashboard</p>
+          <h1>Bank Operations</h1>
+        </div>
+        <div class="topbar-balance">
+          <span>Bank Reserve</span>
+          <strong id="bankReserveBalance">$0.00</strong>
+        </div>
+      </header>
+
+      <section class="stats-grid admin-grid-stats">
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">👥</span>
+          <div>
+            <p>Total Users</p>
+            <h3 id="adminUserCount">0</h3>
+          </div>
+        </article>
+
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">🧾</span>
+          <div>
+            <p>Total Transactions</p>
+            <h3 id="adminTransactionCount">0</h3>
+          </div>
+        </article>
+
+        <article class="mini-stat glass-card">
+          <span class="mini-stat-icon">💱</span>
+          <div>
+            <p>Supported Currencies</p>
+            <h3>GBP / USD / EUR</h3>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid admin-content-grid">
+        <article class="panel glass-card form-panel" id="adminCreateUser">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Create User</p>
+              <h3>Open Customer Account</h3>
+            </div>
+          </div>
+
+          <div id="adminMessage" class="alert-box"></div>
+
+          <form id="adminCreateUserForm" class="transfer-form" autocomplete="off">
+            <label class="input-group">
+              <span>Initial Balance</span>
+              <input type="number" id="adminInitialBalance" min="0" step="0.01" placeholder="Enter opening balance" required />
+            </label>
+
+            <label class="input-group">
+              <span>Account Currency</span>
+              <select id="adminCurrency" required>
+                <option value="GBP">Pounds (GBP)</option>
+                <option value="USD">Dollars (USD)</option>
+                <option value="EUR">Euro (EUR)</option>
+              </select>
+            </label>
+
+            <button type="submit" class="btn btn-primary btn-block">Create Customer Account</button>
+          </form>
+        </article>
+
+        <article class="panel glass-card" id="adminUsers">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">All Customers</p>
+              <h3>Registered Users</h3>
+            </div>
+          </div>
+          <div id="adminUsersTable" class="table-wrapper"></div>
+        </article>
+      </section>
+
+      <section class="content-grid single-panel" id="adminTransactions">
+        <article class="panel glass-card">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Transaction Control</p>
+              <h3>Manage Transactions</h3>
+            </div>
+          </div>
+          <div id="adminTransactionsTable" class="table-wrapper"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase.js"></script>
+  <script src="script.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
