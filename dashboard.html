@@ -19,6 +19,7 @@
           <div>
             <p class="eyebrow">Alpha Bank</p>
             <h2>Banking Suite</h2>
+            <p class="brand-tagline">Next Generation Digital Banking</p>
           </div>
         </div>
 
@@ -38,23 +39,63 @@
         <div>
           <p class="eyebrow">Dashboard</p>
           <h1>Hello, <span data-user-name>Customer</span></h1>
+          <p class="page-description">Track your balance, monitor transaction activity, and move money with a premium Alpha Bank experience.</p>
         </div>
         <div class="topbar-actions">
+          <div class="topbar-balance">
+            <span>Day Mode Default</span>
+            <strong>Alpha Premium</strong>
+          </div>
           <a href="transfer.html" class="btn btn-primary">New Transfer</a>
         </div>
       </header>
 
-      <section class="hero-card glass-card">
-        <div>
+      <section class="hero-card glass-card fintech-card">
+        <div class="hero-balance">
           <p class="eyebrow">Available Balance</p>
           <h2 id="dashboardBalance">$0.00</h2>
-          <p class="muted">Account Number: <span id="dashboardAccountNumber">0000000000</span></p>
-          <p class="muted">Email: <span id="dashboardEmail">-</span></p>
-          <p class="muted">Phone: <span id="dashboardPhone">-</span></p>
-          <p class="muted">Region: <span id="dashboardRegion">-</span> · Currency: <span id="dashboardCurrency">USD</span></p>
+          <p class="brand-tagline">Next Generation Digital Banking</p>
+          <div class="hero-chip">
+            <span>Alpha Secure</span>
+          </div>
+          <div class="account-overview-grid">
+            <div class="overview-pill">
+              <span>Account Name</span>
+              <strong data-user-name>Customer</strong>
+            </div>
+            <div class="overview-pill">
+              <span>Email</span>
+              <strong id="dashboardEmail">-</strong>
+            </div>
+            <div class="overview-pill">
+              <span>Phone</span>
+              <strong id="dashboardPhone">-</strong>
+            </div>
+          </div>
         </div>
-        <div class="hero-chip">
-          <span>Alpha Secure</span>
+        <div class="bank-card-shell">
+          <div class="bank-card">
+            <div class="bank-card-top">
+              <span>Alpha Bank</span>
+              <span class="card-chip">Premium</span>
+            </div>
+            <div class="bank-card-brand">Next Generation Digital Banking</div>
+            <div class="bank-card-balance-label">Account Holder</div>
+            <div class="bank-card-holder" data-user-name>Customer</div>
+            <div class="bank-card-balance-label">Available Balance</div>
+            <div class="bank-card-amount" id="dashboardBalanceCard">$0.00</div>
+            <div class="bank-card-number" id="dashboardAccountNumber">0000000000</div>
+            <div class="bank-card-footer">
+              <div>
+                <span>Region</span>
+                <strong id="dashboardRegion">-</strong>
+              </div>
+              <div>
+                <span>Currency</span>
+                <strong id="dashboardCurrency">USD</strong>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -109,9 +150,14 @@
               <strong>Send Money</strong>
               <p>Transfer instantly to another account.</p>
             </a>
+            <button type="button" class="quick-action-card" data-copy-account="true">
+              <span>📥</span>
+              <strong>Receive</strong>
+              <p>Copy your account number and share it securely.</p>
+            </button>
             <a href="transactions.html" class="quick-action-card">
               <span>🧾</span>
-              <strong>History</strong>
+              <strong>Transactions</strong>
               <p>Review every credit and debit status.</p>
             </a>
             <a href="profile.html" class="quick-action-card">

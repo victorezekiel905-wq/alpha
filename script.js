@@ -5,6 +5,7 @@
     userStorageKey: 'user',
     adminStorageKey: 'admin',
     statusCacheKey: 'alphaBankStatusCache',
+    themeKey: 'alphaBankTheme',
     adminEmail: 'alpha@gmail.com',
     adminPassword: 'Alpha@2026',
     currencies: {
@@ -119,8 +120,10 @@
   const isAdminSession = () => localStorage.getItem(APP.adminStorageKey) === 'true';
 
   const setText = (selector, value) => {
-    const element = document.querySelector(selector);
-    if (element) element.textContent = value;
+    const elements = document.querySelectorAll(selector);
+    elements.forEach((element) => {
+      element.textContent = value;
+    });
   };
 
   const showFeedback = (element, message, type = 'success') => {
@@ -156,6 +159,158 @@
     if (type === 'error') {
       window.setTimeout(() => window.alert(message), 120);
     }
+  };
+
+  const getThemePreference = () => localStorage.getItem(APP.themeKey) || 'day';
+
+  const updateThemeToggle = (theme) => {
+    const toggle = document.querySelector('.theme-toggle');
+    if (!toggle) return;
+    const icon = toggle.querySelector('.theme-icon');
+    const label = toggle.querySelector('.theme-label');
+    if (icon) icon.textContent = theme === 'night' ? '🌙' : '☀️';
+    if (label) label.textContent = theme === 'night' ? 'Night Mode' : 'Day Mode';
+    toggle.setAttribute('aria-label', theme === 'night' ? 'Switch to day mode' : 'Switch to night mode');
+  };
+
+  const applyTheme = (theme) => {
+    const nextTheme = String(theme || 'day').toLowerCase() === 'night' ? 'night' : 'day';
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    if (document.body) document.body.setAttribute('data-theme', nextTheme);
+    localStorage.setItem(APP.themeKey, nextTheme);
+    updateThemeToggle(nextTheme);
+    return nextTheme;
+  };
+
+  const ensureAmbientBackground = () => {
+    if (!document.querySelector('.bg-grid')) {
+      const grid = document.createElement('div');
+      grid.className = 'bg-grid';
+      document.body.prepend(grid);
+    }
+
+    ['orb-1', 'orb-2', 'orb-3'].forEach((name) => {
+      if (!document.querySelector(`.bg-orb.${name}`)) {
+        const orb = document.createElement('div');
+        orb.className = `bg-orb ${name}`;
+        document.body.prepend(orb);
+      }
+    });
+  };
+
+  const setupThemeToggle = () => {
+    if (!document.querySelector('.theme-toggle')) {
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'theme-toggle';
+      toggle.innerHTML = '<span class="theme-icon">☀️</span><span class="theme-label">Day Mode</span>';
+      document.body.appendChild(toggle);
+      toggle.addEventListener('click', () => {
+        const current = document.documentElement.getAttribute('data-theme') || 'day';
+        applyTheme(current === 'night' ? 'day' : 'night');
+      });
+    }
+    applyTheme(getThemePreference());
+  };
+
+  const createRipple = (event, element) => {
+    if (!element) return;
+    const rect = element.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height);
+    const ripple = document.createElement('span');
+    ripple.className = 'ripple';
+    ripple.style.width = `${size}px`;
+    ripple.style.height = `${size}px`;
+    ripple.style.left = `${event.clientX - rect.left - size / 2}px`;
+    ripple.style.top = `${event.clientY - rect.top - size / 2}px`;
+    element.appendChild(ripple);
+    window.setTimeout(() => ripple.remove(), 650);
+  };
+
+  const setupRippleEffect = () => {
+    document.addEventListener('click', (event) => {
+      const interactive = event.target.closest('.btn, .quick-action-card, .theme-toggle');
+      if (!interactive) return;
+      createRipple(event, interactive);
+    });
+  };
+
+  const copyText = async (value) => {
+    const text = String(value || '').trim();
+    if (!text) return false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const field = document.createElement('textarea');
+        field.value = text;
+        document.body.appendChild(field);
+        field.select();
+        document.execCommand('copy');
+        field.remove();
+      }
+      return true;
+    } catch (error) {
+      console.error('[AlphaBank] copy error', error);
+      return false;
+    }
+  };
+
+  const setupQuickActionHelpers = () => {
+    document.addEventListener('click', async (event) => {
+      const copyButton = event.target.closest('[data-copy-account="true"]');
+      if (!copyButton) return;
+      event.preventDefault();
+      const session = getSession();
+      const accountFromPage = document.getElementById('dashboardAccountNumber')?.textContent?.trim();
+      const value = accountFromPage || session?.accountNumber || session?.user?.account_number || '';
+      if (!value) {
+        showPopup('Account number unavailable right now.', 'error');
+        return;
+      }
+      const copied = await copyText(value);
+      showPopup(copied ? 'Account number copied.' : 'Unable to copy account number.', copied ? 'success' : 'error');
+    });
+  };
+
+  const resolveElement = (target) => typeof target === 'string' ? document.querySelector(target) : target;
+
+  const animateValue = (target, endValue, formatter, duration = 1100) => {
+    const element = resolveElement(target);
+    if (!element) return;
+    const finalValue = Number(endValue || 0);
+    const prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion) {
+      element.textContent = formatter(finalValue);
+      element.dataset.currentValue = String(finalValue);
+      return;
+    }
+    const startValue = Number(element.dataset.currentValue || 0);
+    const startTime = performance.now();
+    const diff = finalValue - startValue;
+
+    const step = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = startValue + diff * eased;
+      element.textContent = formatter(current);
+      if (progress < 1) {
+        requestAnimationFrame(step);
+      } else {
+        element.dataset.currentValue = String(finalValue);
+        element.textContent = formatter(finalValue);
+      }
+    };
+
+    requestAnimationFrame(step);
+  };
+
+  const animateCurrency = (target, amount, currency = 'USD') => {
+    animateValue(target, amount, (value) => formatCurrency(value, currency));
+  };
+
+  const animateCount = (target, amount) => {
+    animateValue(target, amount, (value) => Math.round(value).toLocaleString());
   };
 
   const togglePasswordButtons = () => {
@@ -691,11 +846,18 @@
     getPrimaryTransactionsForCustomer,
     getDisplayStatus,
     getNotificationMessage,
-    startStatusWatcher
+    startStatusWatcher,
+    applyTheme,
+    animateCurrency,
+    animateCount
   };
 
   document.addEventListener('DOMContentLoaded', () => {
     console.log('[AlphaBank] App booted');
+    ensureAmbientBackground();
+    setupThemeToggle();
+    setupRippleEffect();
+    setupQuickActionHelpers();
     requireAuth();
     setupLogout();
     togglePasswordButtons();

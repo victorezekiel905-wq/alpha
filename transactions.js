@@ -43,10 +43,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     bank.setText('[data-user-name]', user.user_name || 'Customer');
     bank.setText('#dashboardAccountNumber', user.account_number);
-    bank.setText('#dashboardBalance', bank.formatCurrency(user.balance, user.currency));
-    bank.setText('#miniBalance', bank.formatCurrency(user.balance, user.currency));
-    bank.setText('#totalCredits', bank.formatCurrency(totalCreditsValue, user.currency));
-    bank.setText('#totalDebits', bank.formatCurrency(totalDebitsValue, user.currency));
+    if (bank.animateCurrency) {
+      bank.animateCurrency('#dashboardBalance', user.balance, user.currency);
+      bank.animateCurrency('#dashboardBalanceCard', user.balance, user.currency);
+      bank.animateCurrency('#miniBalance', user.balance, user.currency);
+      bank.animateCurrency('#totalCredits', totalCreditsValue, user.currency);
+      bank.animateCurrency('#totalDebits', totalDebitsValue, user.currency);
+    } else {
+      bank.setText('#dashboardBalance', bank.formatCurrency(user.balance, user.currency));
+      bank.setText('#dashboardBalanceCard', bank.formatCurrency(user.balance, user.currency));
+      bank.setText('#miniBalance', bank.formatCurrency(user.balance, user.currency));
+      bank.setText('#totalCredits', bank.formatCurrency(totalCreditsValue, user.currency));
+      bank.setText('#totalDebits', bank.formatCurrency(totalDebitsValue, user.currency));
+    }
     bank.setText('#dashboardEmail', user.email || '-');
     bank.setText('#dashboardPhone', user.phone || '-');
     bank.setText('#dashboardRegion', user.region || '-');
@@ -115,13 +124,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const valueToShow = direction.label === 'Credit' && displayStatus === 'success' ? txn.netAmount : txn.amount;
             return `
               <tr>
-                <td>${bank.formatDate(txn.created_at)}</td>
-                <td class="receipt-text">${bank.escapeHtml(txn.receipt || '-')}</td>
-                <td>${bank.escapeHtml(txn.sender_account || '-')}</td>
-                <td>${bank.escapeHtml(txn.receiver_account || '-')}</td>
-                <td><span class="transaction-type ${direction.typeClass}">${direction.label}</span></td>
-                <td>${statusBadge(displayStatus)}</td>
-                <td class="${direction.amountClass}">${direction.prefix}${bank.formatCurrency(valueToShow, txn.currency || user.currency)}</td>
+                <td data-label="Date">${bank.formatDate(txn.created_at)}</td>
+                <td data-label="Receipt" class="receipt-text">${bank.escapeHtml(txn.receipt || '-')}</td>
+                <td data-label="Sender">${bank.escapeHtml(txn.sender_account || '-')}</td>
+                <td data-label="Receiver">${bank.escapeHtml(txn.receiver_account || '-')}</td>
+                <td data-label="Type"><span class="transaction-type ${direction.typeClass}">${direction.label}</span></td>
+                <td data-label="Status">${statusBadge(displayStatus)}</td>
+                <td data-label="Amount" class="${direction.amountClass}">${direction.prefix}${bank.formatCurrency(valueToShow, txn.currency || user.currency)}</td>
               </tr>
             `;
           }).join('')}
@@ -136,15 +145,27 @@ document.addEventListener('DOMContentLoaded', () => {
     bank.setText('#profileEmail', user.email || '-');
     bank.setText('#profilePhone', user.phone || '-');
     bank.setText('#profileRegion', user.region || '-');
-    bank.setText('#profileBalance', bank.formatCurrency(user.balance, user.currency));
-    bank.setText('#profileTransactionCount', String(transactions.length));
+    if (bank.animateCurrency) {
+      bank.animateCurrency('#profileBalance', user.balance, user.currency);
+    } else {
+      bank.setText('#profileBalance', bank.formatCurrency(user.balance, user.currency));
+    }
+    if (bank.animateCount) {
+      bank.animateCount('#profileTransactionCount', transactions.length);
+    } else {
+      bank.setText('#profileTransactionCount', String(transactions.length));
+    }
     bank.setText('#profileCurrency', user.currency || 'USD');
   };
 
   const updateTransferBalance = (user) => {
     const balanceElement = document.getElementById('transferAvailableBalance');
     if (balanceElement) {
-      balanceElement.textContent = bank.formatCurrency(user.balance, user.currency);
+      if (bank.animateCurrency) {
+        bank.animateCurrency(balanceElement, user.balance, user.currency);
+      } else {
+        balanceElement.textContent = bank.formatCurrency(user.balance, user.currency);
+      }
     }
   };
 

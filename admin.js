@@ -48,13 +48,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <tbody>
           ${users.map((user) => `
             <tr>
-              <td>${bank.escapeHtml(user.user_name || '-')}</td>
-              <td>${bank.escapeHtml(user.email || '-')}</td>
-              <td>${bank.escapeHtml(user.phone || '-')}</td>
-              <td class="receipt-text">${bank.escapeHtml(user.account_number || '-')}</td>
-              <td>${bank.escapeHtml(user.region || '-')}</td>
-              <td>${bank.escapeHtml(user.currency || 'USD')}</td>
-              <td>${bank.formatCurrency(user.balance, user.currency || 'USD')}</td>
+              <td data-label="Full Name">${bank.escapeHtml(user.user_name || '-')}</td>
+              <td data-label="Email">${bank.escapeHtml(user.email || '-')}</td>
+              <td data-label="Phone">${bank.escapeHtml(user.phone || '-')}</td>
+              <td data-label="Account Number" class="receipt-text">${bank.escapeHtml(user.account_number || '-')}</td>
+              <td data-label="Region">${bank.escapeHtml(user.region || '-')}</td>
+              <td data-label="Currency">${bank.escapeHtml(user.currency || 'USD')}</td>
+              <td data-label="Balance">${bank.formatCurrency(user.balance, user.currency || 'USD')}</td>
             </tr>
           `).join('')}
         </tbody>
@@ -96,14 +96,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const isDebit = type === 'debit';
             return `
               <tr>
-                <td>${bank.formatDate(transaction.created_at)}</td>
-                <td class="receipt-text">${bank.escapeHtml(transaction.receipt || '-')}</td>
-                <td>${bank.formatCurrency(transaction.amount, transaction.currency || 'USD')}</td>
-                <td>${bank.escapeHtml(senderLabel)}</td>
-                <td>${bank.escapeHtml(receiverLabel)}</td>
-                <td>${bank.escapeHtml(type || '-')}</td>
-                <td>${statusBadge(transaction.status || 'success')}</td>
-                <td>
+                <td data-label="Date">${bank.formatDate(transaction.created_at)}</td>
+                <td data-label="Receipt" class="receipt-text">${bank.escapeHtml(transaction.receipt || '-')}</td>
+                <td data-label="Amount">${bank.formatCurrency(transaction.amount, transaction.currency || 'USD')}</td>
+                <td data-label="Sender">${bank.escapeHtml(senderLabel)}</td>
+                <td data-label="Receiver">${bank.escapeHtml(receiverLabel)}</td>
+                <td data-label="Type">${bank.escapeHtml(type || '-')}</td>
+                <td data-label="Status">${statusBadge(transaction.status || 'success')}</td>
+                <td data-label="Actions">
                   ${isDebit ? `
                     <div class="action-group">
                       <button class="btn btn-primary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="success">Approve</button>
@@ -126,9 +126,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const users = await bank.fetchVisibleUsers();
     const transactions = await bank.fetchAllTransactions();
 
-    bank.setText('#bankReserveBalance', bank.formatCurrency(reserve.balance, reserve.currency || 'USD'));
-    bank.setText('#adminUserCount', String(users.length));
-    bank.setText('#adminTransactionCount', String(transactions.filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'debit').length));
+    if (bank.animateCurrency) {
+      bank.animateCurrency('#bankReserveBalance', reserve.balance, reserve.currency || 'USD');
+    } else {
+      bank.setText('#bankReserveBalance', bank.formatCurrency(reserve.balance, reserve.currency || 'USD'));
+    }
+    if (bank.animateCount) {
+      bank.animateCount('#adminUserCount', users.length);
+      bank.animateCount('#adminTransactionCount', transactions.filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'debit').length);
+    } else {
+      bank.setText('#adminUserCount', String(users.length));
+      bank.setText('#adminTransactionCount', String(transactions.filter((txn) => String(txn.transaction_type || '').toLowerCase() === 'debit').length));
+    }
 
     renderUsers(users);
     await renderTransactions(transactions, users);
