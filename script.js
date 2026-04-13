@@ -344,7 +344,8 @@
 
   const parseUserMeta = (row = {}) => {
     const meta = safeParse(row.receipt, {});
-    const history = String(meta.history || meta.flagMessage || '').trim();
+    const rawHistory = row.history ?? meta.history ?? meta.flagMessage ?? '';
+    const history = String(rawHistory || '').trim();
     const flagged = Object.prototype.hasOwnProperty.call(meta, 'flagged')
       ? normalizeBoolean(meta.flagged)
       : Boolean(history);
@@ -358,7 +359,7 @@
       defaultTransactionsGenerated: normalizeBoolean(meta.defaultTransactionsGenerated),
       history,
       flagMessage: history,
-      flagged
+      flagged: Boolean(history) ? flagged : false
     };
   };
 
@@ -427,9 +428,14 @@
       sender_account: meta.email,
       receiver_account: meta.phone,
       receipt: JSON.stringify(meta),
+      history: meta.history || null,
       transaction_type: null,
       amount: null
     };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'statement')) {
+      nextPayload.statement = payload.statement;
+    }
 
     return nextPayload;
   };
