@@ -38,22 +38,26 @@
       <header class="topbar glass-card">
         <div>
           <p class="eyebrow">Dashboard</p>
-          <h1>Hello, <span data-user-name>Customer</span></h1>
+          <h1 class="dashboard-greeting">Hello, <span data-user-name>Customer</span></h1>
           <p class="page-description">Track your balance, monitor transaction activity, and move money with a premium Alpha Bank experience.</p>
         </div>
         <div class="topbar-actions">
+          <div class="dashboard-profile-avatar" aria-label="Profile image">
+            <img id="dashboardProfileImage" class="user-profile-image" data-profile-image alt="Profile image" />
+            <span class="dashboard-profile-fallback" data-profile-avatar-text>AB</span>
+          </div>
           <div class="topbar-balance">
             <span>Day Mode Default</span>
             <strong>Alpha Premium</strong>
           </div>
-          <a href="transfer.html" class="btn btn-primary">New Transfer</a>
+          <a href="transfer.html" class="btn btn-primary send-money-btn">New Transfer</a>
         </div>
       </header>
 
       <section class="hero-card glass-card fintech-card">
         <div class="hero-balance">
           <p class="eyebrow">Available Balance</p>
-          <h2 id="dashboardBalance">$0.00</h2>
+          <h2 id="dashboardBalance" class="balance-amount">$0.00</h2>
           <p class="brand-tagline">Next Generation Digital Banking</p>
           <div class="hero-chip">
             <span>Alpha Secure</span>
@@ -130,7 +134,7 @@
           <div class="panel-header">
             <div>
               <p class="eyebrow">Recent activity</p>
-              <h3>Last 5 Transactions</h3>
+              <h3 class="activity-title">Last 5 Transactions</h3>
             </div>
             <a href="transactions.html" class="text-link">View All</a>
           </div>

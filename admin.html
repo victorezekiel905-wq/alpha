@@ -152,7 +152,7 @@
           <form id="adminAddBalanceForm" class="transfer-form" autocomplete="off">
             <label class="input-group">
               <span>Account Number</span>
-              <input type="text" id="adminBalanceAccountNumber" placeholder="Enter customer account number" required />
+              <input type="text" id="adminBalanceAccountNumber" list="adminUserAccountOptions" placeholder="Enter customer account number" required />
             </label>
 
             <label class="input-group">
@@ -162,6 +162,7 @@
 
             <button type="submit" class="btn btn-secondary btn-block">Add Balance</button>
           </form>
+          <datalist id="adminUserAccountOptions"></datalist>
         </article>
 
         <article class="panel glass-card" id="adminUsers">

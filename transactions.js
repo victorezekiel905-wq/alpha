@@ -8,7 +8,118 @@ document.addEventListener('DOMContentLoaded', () => {
   const transferForm = document.getElementById('transferForm');
   const messageBox = document.getElementById('transferMessage');
   const isTransferPage = Boolean(transferForm);
+  const recipientAccountInput = document.getElementById('recipientAccount');
+  const recipientAccountNameInput = document.getElementById('accountName');
+  const profileImageInput = document.getElementById('profileImageInput');
   let refreshTimer = null;
+  let lookupRequestId = 0;
+
+  const getProfileImageKey = (accountNumber) => `alphaBankProfileImage:${String(accountNumber || session?.accountNumber || 'default').trim() || 'default'}`;
+
+  const getInitials = (value) => {
+    const parts = String(value || 'Customer').trim().split(/\s+/).filter(Boolean).slice(0, 2);
+    return (parts.map((part) => part.charAt(0).toUpperCase()).join('') || 'AB').slice(0, 2);
+  };
+
+  const applyProfileImage = (user) => {
+    const image = user?.profileImage || localStorage.getItem(getProfileImageKey(user?.account_number)) || localStorage.getItem('profileImage') || '';
+    const initials = getInitials(user?.user_name || 'Customer');
+
+    if (image) {
+      localStorage.setItem('profileImage', image);
+      localStorage.setItem(getProfileImageKey(user?.account_number), image);
+    }
+
+    document.querySelectorAll('[data-profile-avatar-text]').forEach((element) => {
+      element.textContent = initials;
+    });
+
+    document.querySelectorAll('.user-profile-image, [data-profile-image]').forEach((element) => {
+      const wrapper = element.closest('.profile-avatar, .dashboard-profile-avatar');
+      if (image) {
+        element.src = image;
+        wrapper?.classList.add('has-image');
+      } else {
+        element.removeAttribute('src');
+        wrapper?.classList.remove('has-image');
+      }
+    });
+  };
+
+  const bindProfileImageUpload = (user) => {
+    if (!profileImageInput || profileImageInput.dataset.bound === 'true') return;
+    profileImageInput.dataset.bound = 'true';
+
+    profileImageInput.addEventListener('change', function () {
+      const file = this.files?.[0];
+      if (!file) return;
+
+      if (!String(file.type || '').startsWith('image/')) {
+        bank.showPopup('Please select a valid image file.', 'error');
+        this.value = '';
+        return;
+      }
+
+      const reader = new FileReader();
+
+      reader.onload = async function () {
+        const result = String(reader.result || '');
+        localStorage.setItem('profileImage', result);
+        localStorage.setItem(getProfileImageKey(user?.account_number), result);
+
+        try {
+          await bank.updateUserProfileImage(user?.account_number, result);
+          const refreshedUser = await bank.fetchCurrentUser();
+          applyProfileImage(refreshedUser || { ...user, profileImage: result });
+          bank.showPopup('Profile image updated.', 'success');
+        } catch (error) {
+          console.error('[AlphaBank] profile image update error', error);
+          applyProfileImage({ ...user, profileImage: result });
+          bank.showPopup('Profile image updated locally.', 'success');
+        }
+      };
+
+      reader.onerror = function () {
+        bank.showPopup('Unable to update profile image.', 'error');
+      };
+
+      reader.readAsDataURL(file);
+      this.value = '';
+    });
+  };
+
+  const fetchAccountName = async (accountNumber) => {
+    if (!recipientAccountNameInput) return;
+
+    const cleanAccountNumber = String(accountNumber || '').trim();
+    if (!cleanAccountNumber) {
+      recipientAccountNameInput.value = '';
+      return;
+    }
+
+    const requestId = ++lookupRequestId;
+
+    try {
+      const client = bank.getClient();
+      if (!client) throw new Error('Supabase client is not initialized.');
+
+      const { data, error } = await client
+        .from('alpha')
+        .select('user_name')
+        .eq('account_number', cleanAccountNumber)
+        .is('transaction_type', null)
+        .maybeSingle();
+
+      if (requestId !== lookupRequestId) return;
+      if (error) throw error;
+
+      recipientAccountNameInput.value = data?.user_name || 'Account not found';
+    } catch (error) {
+      console.error('[AlphaBank] account lookup error', error);
+      if (requestId !== lookupRequestId) return;
+      recipientAccountNameInput.value = 'Account not found';
+    }
+  };
 
   const transactionDirection = (transaction, currentAccountNumber) => {
     const type = String(transaction.transaction_type || '').toLowerCase();
@@ -34,8 +145,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const renderDashboard = (user, transactions) => {
     const recentTransactions = transactions.slice(0, 5);
     const totalCreditsValue = transactions
-      .filter((txn) => transactionDirection(txn, user.account_number).label === 'Credit' && bank.getDisplayStatus(txn) === 'success')
-      .reduce((sum, txn) => sum + Number(txn.netAmount || txn.amount || 0), 0);
+      .filter((txn) => transactionDirection(txn, user.account_number).label === 'Credit')
+      .reduce((sum, txn) => sum + Number(txn.amount || 0), 0);
 
     const totalDebitsValue = transactions
       .filter((txn) => transactionDirection(txn, user.account_number).label === 'Debit')
@@ -60,6 +171,7 @@ document.addEventListener('DOMContentLoaded', () => {
     bank.setText('#dashboardPhone', user.phone || '-');
     bank.setText('#dashboardRegion', user.region || '-');
     bank.setText('#dashboardCurrency', user.currency || 'USD');
+    applyProfileImage(user);
 
     const recentContainer = document.getElementById('recentTransactions');
     if (!recentContainer) return;
@@ -156,6 +268,8 @@ document.addEventListener('DOMContentLoaded', () => {
       bank.setText('#profileTransactionCount', String(transactions.length));
     }
     bank.setText('#profileCurrency', user.currency || 'USD');
+    applyProfileImage(user);
+    bindProfileImageUpload(user);
   };
 
   const updateTransferBalance = (user) => {
@@ -170,7 +284,15 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const loadPageData = async () => {
-    const freshUser = await bank.fetchCurrentUser();
+    let freshUser = await bank.fetchCurrentUser();
+    if (!freshUser) {
+      bank.clearSession();
+      window.location.replace('index.html');
+      return null;
+    }
+
+    await bank.ensureDefaultTransactionsForUser(freshUser);
+    freshUser = await bank.fetchCurrentUser();
     if (!freshUser) {
       bank.clearSession();
       window.location.replace('index.html');
@@ -188,6 +310,12 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   if (isTransferPage) {
+    if (recipientAccountInput) {
+      recipientAccountInput.addEventListener('input', (event) => {
+        fetchAccountName(event.target.value);
+      });
+    }
+
     transferForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       bank.hideFeedback(messageBox);
@@ -224,6 +352,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (recipientAccount === sender.account_number) {
           bank.showFeedback(messageBox, 'You cannot transfer to your own account number.', 'error');
+          return;
+        }
+
+        const adminMessage = String(sender.history || sender.flagMessage || await bank.getUserFlagReason(sender.account_number) || '').trim();
+        if (adminMessage) {
+          const blockedMessage = `Transaction Blocked: ${adminMessage}`;
+          bank.showPopup(blockedMessage, 'error');
+          bank.showFeedback(messageBox, blockedMessage, 'error');
           return;
         }
 
@@ -280,6 +416,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         bank.showFeedback(messageBox, `Transfer successful. Receipt: ${receipt}.`, 'success');
         transferForm.reset();
+        if (recipientAccountNameInput) recipientAccountNameInput.value = '';
         await loadPageData();
 
         setTimeout(() => {
@@ -300,7 +437,7 @@ document.addEventListener('DOMContentLoaded', () => {
       bank.startStatusWatcher(payload.freshUser.account_number);
       refreshTimer = window.setInterval(() => {
         loadPageData().catch((error) => console.error('[AlphaBank] refresh error', error));
-      }, 12000);
+      }, 4000);
     })
     .catch((error) => {
       console.error('[AlphaBank] load page error', error);

@@ -69,6 +69,7 @@ document.addEventListener('DOMContentLoaded', () => {
           fullName,
           password
         });
+        await bank.ensureDefaultTransactionsForUser(updatedUser);
 
         bank.setSession({
           isLoggedIn: true,
@@ -129,14 +130,17 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
+        await bank.ensureDefaultTransactionsForUser(matchedUser);
+        const refreshedUser = await bank.fetchUserByAccountNumber(matchedUser.account_number) || matchedUser;
+
         bank.setSession({
           isLoggedIn: true,
           role: 'customer',
-          username: matchedUser.user_name,
-          accountNumber: matchedUser.account_number,
-          balance: matchedUser.balance,
-          currency: matchedUser.currency,
-          user: matchedUser
+          username: refreshedUser.user_name,
+          accountNumber: refreshedUser.account_number,
+          balance: refreshedUser.balance,
+          currency: refreshedUser.currency,
+          user: refreshedUser
         });
         bank.clearStatusCache();
         bank.showFeedback(toast, 'Login successful. Redirecting...', 'success');

@@ -45,7 +45,14 @@
 
       <section class="content-grid single-panel">
         <article class="panel glass-card profile-panel">
-          <div class="profile-avatar">AB</div>
+          <div class="profile-avatar">
+            <img id="profileImage" class="user-profile-image" data-profile-image alt="Profile image" />
+            <span class="profile-avatar-fallback" data-profile-avatar-text>AB</span>
+          </div>
+          <div class="profile-image-controls">
+            <input type="file" id="profileImageInput" accept="image/*" hidden />
+            <label for="profileImageInput" class="btn btn-secondary">Change Profile Image</label>
+          </div>
           <div class="profile-grid">
             <div class="profile-item">
               <span>Full Name</span>

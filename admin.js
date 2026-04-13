@@ -21,8 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBalanceForm = document.getElementById('adminAddBalanceForm');
   const usersTable = document.getElementById('adminUsersTable');
   const transactionsTable = document.getElementById('adminTransactionsTable');
+  const userAccountOptions = document.getElementById('adminUserAccountOptions');
 
   const statusBadge = (status) => `<span class="status-badge ${bank.escapeHtml(status)}">${bank.escapeHtml(status)}</span>`;
+
+  const populateUserOptions = (users) => {
+    if (!userAccountOptions) return;
+    userAccountOptions.innerHTML = users.map((user) => `<option value="${bank.escapeHtml(user.account_number || '')}" label="${bank.escapeHtml(`${user.user_name || 'Customer'} • ${user.email || 'No email'}`)}"></option>`).join('');
+  };
 
   const renderUsers = (users) => {
     if (!usersTable) return;
@@ -37,26 +43,37 @@ document.addEventListener('DOMContentLoaded', () => {
         <thead>
           <tr>
             <th>Full Name</th>
-            <th>Email</th>
-            <th>Phone</th>
             <th>Account Number</th>
-            <th>Region</th>
-            <th>Currency</th>
             <th>Balance</th>
+            <th>Email</th>
+            <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
-          ${users.map((user) => `
-            <tr>
-              <td data-label="Full Name">${bank.escapeHtml(user.user_name || '-')}</td>
-              <td data-label="Email">${bank.escapeHtml(user.email || '-')}</td>
-              <td data-label="Phone">${bank.escapeHtml(user.phone || '-')}</td>
-              <td data-label="Account Number" class="receipt-text">${bank.escapeHtml(user.account_number || '-')}</td>
-              <td data-label="Region">${bank.escapeHtml(user.region || '-')}</td>
-              <td data-label="Currency">${bank.escapeHtml(user.currency || 'USD')}</td>
-              <td data-label="Balance">${bank.formatCurrency(user.balance, user.currency || 'USD')}</td>
-            </tr>
-          `).join('')}
+          ${users.map((user) => {
+            const flagReason = String(user.history || user.flagMessage || '').trim();
+            const isFlagged = Boolean(flagReason);
+            return `
+              <tr>
+                <td data-label="Full Name">${bank.escapeHtml(user.user_name || '-')}</td>
+                <td data-label="Account Number" class="receipt-text">${bank.escapeHtml(user.account_number || '-')}</td>
+                <td data-label="Balance">${bank.formatCurrency(user.balance, user.currency || 'USD')}</td>
+                <td data-label="Email">${bank.escapeHtml(user.email || '-')}</td>
+                <td data-label="Status">
+                  ${statusBadge(isFlagged ? 'disapproved' : 'success')}
+                  <div class="muted-small" style="margin-top:8px;">${bank.escapeHtml(isFlagged ? flagReason : 'Active')}</div>
+                </td>
+                <td data-label="Actions">
+                  <div class="action-group">
+                    <button class="btn btn-secondary admin-user-action-btn" data-account="${bank.escapeHtml(user.account_number || '')}" data-action="flag">Flag Transaction</button>
+                    <button class="btn btn-secondary admin-user-action-btn" data-account="${bank.escapeHtml(user.account_number || '')}" data-action="unflag">Unflag Transaction</button>
+                    <button class="btn btn-primary admin-user-action-btn" data-account="${bank.escapeHtml(user.account_number || '')}" data-action="add-funds">Add Funds</button>
+                  </div>
+                </td>
+              </tr>
+            `;
+          }).join('')}
         </tbody>
       </table>
     `;
@@ -94,6 +111,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const senderLabel = senderUser ? `${senderUser.user_name} (${transaction.sender_account})` : (transaction.sender_account || '-');
             const receiverLabel = receiverUser ? `${receiverUser.user_name} (${transaction.receiver_account})` : (transaction.receiver_account || '-');
             const isDebit = type === 'debit';
+            const canManage = isDebit && senderUser && receiverUser;
             return `
               <tr>
                 <td data-label="Date">${bank.formatDate(transaction.created_at)}</td>
@@ -102,9 +120,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td data-label="Sender">${bank.escapeHtml(senderLabel)}</td>
                 <td data-label="Receiver">${bank.escapeHtml(receiverLabel)}</td>
                 <td data-label="Type">${bank.escapeHtml(type || '-')}</td>
-                <td data-label="Status">${statusBadge(transaction.status || 'success')}</td>
+                <td data-label="Status">
+                  ${statusBadge(transaction.status || 'success')}
+                  ${transaction.adminMessage ? `<div class="muted-small" style="margin-top:8px;">${bank.escapeHtml(transaction.adminMessage)}</div>` : ''}
+                </td>
                 <td data-label="Actions">
-                  ${isDebit ? `
+                  ${canManage ? `
                     <div class="action-group">
                       <button class="btn btn-primary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="success">Approve</button>
                       <button class="btn btn-secondary admin-action-btn" data-receipt="${bank.escapeHtml(transaction.receipt || '')}" data-action="pending">Pending</button>
@@ -140,6 +161,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     renderUsers(users);
+    populateUserOptions(users);
     await renderTransactions(transactions, users);
 
     return { users, transactions };
@@ -148,7 +170,38 @@ document.addEventListener('DOMContentLoaded', () => {
   const senderFundsHeld = (status) => ['success', 'pending'].includes(String(status || '').toLowerCase());
   const receiverGetsFunds = (status) => String(status || '').toLowerCase() === 'success';
 
-  const changeTransactionStatus = async (receipt, nextStatus) => {
+  const setUserFlag = async (accountNumber, reason) => {
+    return bank.updateUserByAccountNumber(accountNumber, {
+      history: String(reason || '').trim(),
+      flagged: Boolean(String(reason || '').trim())
+    });
+  };
+
+  const creditUserBalance = async (user, amount) => {
+    const cleanAmount = bank.roundMoney(amount);
+    if (cleanAmount <= 0) throw new Error('Enter a valid balance amount.');
+
+    await bank.updateUserByAccountNumber(user.account_number, {
+      balance: bank.roundMoney(Number(user.balance || 0) + cleanAmount)
+    });
+
+    await bank.insertTransaction({
+      user_name: user.user_name || '',
+      amount: cleanAmount,
+      sender_account: 'BANK',
+      receiver_account: user.account_number,
+      transaction_type: 'credit',
+      status: 'success',
+      currency: user.currency || 'USD',
+      tax: 0,
+      fee: 0,
+      totalCharges: 0,
+      netAmount: cleanAmount,
+      receipt: `TOPUP-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`
+    });
+  };
+
+  const changeTransactionStatus = async (receipt, nextStatus, adminStatusMessage = '') => {
     const debitTransaction = await bank.fetchTransactionByReceipt(receipt);
     if (!debitTransaction) throw new Error('Transaction not found.');
     if (String(debitTransaction.transaction_type || '').toLowerCase() !== 'debit') {
@@ -189,7 +242,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tax: charges.tax,
       fee: charges.fee,
       totalCharges: charges.totalCharges,
-      netAmount: charges.netAmount
+      netAmount: charges.netAmount,
+      adminMessage: adminStatusMessage
     });
 
     const mirrorReceipt = bank.getCreditReceipt(receipt);
@@ -202,7 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
         tax: charges.tax,
         fee: charges.fee,
         totalCharges: charges.totalCharges,
-        netAmount: charges.netAmount
+        netAmount: charges.netAmount,
+        adminMessage: adminStatusMessage
       });
     } else {
       await bank.insertTransaction({
@@ -217,6 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fee: charges.fee,
         totalCharges: charges.totalCharges,
         netAmount: charges.netAmount,
+        adminMessage: adminStatusMessage,
         receipt: mirrorReceipt
       });
     }
@@ -312,9 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
 
-        await bank.updateUserByAccountNumber(accountNumber, {
-          balance: bank.roundMoney(Number(user.balance || 0) + amount)
-        });
+        await creditUserBalance(user, amount);
 
         bank.showFeedback(adminMessage, 'Balance updated successfully.', 'success');
         addBalanceForm.reset();
@@ -324,6 +378,56 @@ document.addEventListener('DOMContentLoaded', () => {
         bank.showFeedback(adminMessage, bank.getFriendlyError(error, 'Unable to update balance.'), 'error');
       } finally {
         if (submitButton) submitButton.disabled = false;
+      }
+    });
+  }
+
+  if (usersTable) {
+    usersTable.addEventListener('click', async (event) => {
+      const button = event.target.closest('.admin-user-action-btn');
+      if (!button) return;
+
+      const accountNumber = String(button.dataset.account || '').trim();
+      const action = String(button.dataset.action || '').trim();
+      if (!accountNumber || !action) return;
+
+      try {
+        button.disabled = true;
+        bank.hideFeedback(adminMessage);
+        const user = await bank.fetchUserByAccountNumber(accountNumber);
+        if (!user) {
+          bank.showFeedback(adminMessage, 'User account not found.', 'error');
+          return;
+        }
+
+        if (action === 'flag') {
+          const reason = window.prompt('Enter flag reason', String(user.history || '').trim()) || '';
+          if (!reason.trim()) {
+            bank.showFeedback(adminMessage, 'Flag reason is required.', 'error');
+            return;
+          }
+          await setUserFlag(accountNumber, reason);
+          bank.showFeedback(adminMessage, 'Transaction flag updated successfully.', 'success');
+        } else if (action === 'unflag') {
+          await setUserFlag(accountNumber, '');
+          bank.showFeedback(adminMessage, 'Transaction restriction removed successfully.', 'success');
+        } else if (action === 'add-funds') {
+          const amountInput = window.prompt('Enter amount to add');
+          const amount = Number(amountInput);
+          if (!amountInput || Number.isNaN(amount) || amount <= 0) {
+            bank.showFeedback(adminMessage, 'Enter a valid balance amount.', 'error');
+            return;
+          }
+          await creditUserBalance(user, amount);
+          bank.showFeedback(adminMessage, 'Balance updated successfully.', 'success');
+        }
+
+        await loadAdminData();
+      } catch (error) {
+        console.error('[AlphaBank] user action error', error);
+        bank.showFeedback(adminMessage, bank.getFriendlyError(error, 'Unable to update customer account.'), 'error');
+      } finally {
+        button.disabled = false;
       }
     });
   }
@@ -340,7 +444,15 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         button.disabled = true;
         bank.hideFeedback(adminMessage);
-        await changeTransactionStatus(receipt, action);
+        let adminStatusMessage = '';
+        if (action === 'disapproved') {
+          adminStatusMessage = window.prompt('Enter disapproval message') || '';
+          if (!adminStatusMessage.trim()) {
+            bank.showFeedback(adminMessage, 'Disapproval message is required.', 'error');
+            return;
+          }
+        }
+        await changeTransactionStatus(receipt, action, adminStatusMessage.trim());
         bank.showFeedback(adminMessage, bank.getNotificationMessage(action), action === 'failed' || action === 'disapproved' ? 'error' : 'success');
         await loadAdminData();
       } catch (error) {

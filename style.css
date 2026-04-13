@@ -1564,3 +1564,75 @@ html[data-theme="night"] .theme-toggle {
     opacity: 0;
   }
 }
+
+
+.dashboard-greeting {
+  font-size: 1.2rem !important;
+}
+
+.balance-amount {
+  font-size: 1.5rem !important;
+}
+
+.send-money-btn {
+  font-size: 0.9rem;
+  padding: 8px 12px;
+}
+
+.activity-title {
+  font-size: 1rem !important;
+}
+
+.dashboard-profile-avatar,
+.profile-avatar {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-profile-avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 20px;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,0.46);
+  border: 1px solid rgba(0, 102, 255, 0.12);
+  flex-shrink: 0;
+}
+
+html[data-theme="night"] .dashboard-profile-avatar {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+}
+
+.dashboard-profile-avatar img,
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: none;
+}
+
+.dashboard-profile-avatar.has-image img,
+.profile-avatar.has-image img {
+  display: block;
+}
+
+.dashboard-profile-avatar.has-image .dashboard-profile-fallback,
+.profile-avatar.has-image .profile-avatar-fallback {
+  display: none;
+}
+
+.dashboard-profile-fallback,
+.profile-avatar-fallback {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.profile-image-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}

@@ -24,6 +24,8 @@
     }
   };
 
+  const normalizeBoolean = (value) => value === true || value === 'true' || value === 1 || value === '1';
+
   const getClient = () => window.AlphaBankSupabase || window.alphaSupabase || window.supabaseClient || null;
   const getSession = () => safeParse(localStorage.getItem(APP.sessionKey), null);
   const getStoredUser = () => safeParse(localStorage.getItem(APP.userStorageKey), null);
@@ -342,25 +344,46 @@
 
   const parseUserMeta = (row = {}) => {
     const meta = safeParse(row.receipt, {});
+    const history = String(meta.history || meta.flagMessage || '').trim();
+    const flagged = Object.prototype.hasOwnProperty.call(meta, 'flagged')
+      ? normalizeBoolean(meta.flagged)
+      : Boolean(history);
     return {
       fullName: meta.fullName || row.user_name || '',
       email: meta.email || row.sender_account || '',
       phone: meta.phone || row.receiver_account || '',
       region: meta.region || 'USA',
-      currency: meta.currency || 'USD'
+      currency: meta.currency || 'USD',
+      profileImage: meta.profileImage || '',
+      defaultTransactionsGenerated: normalizeBoolean(meta.defaultTransactionsGenerated),
+      history,
+      flagMessage: history,
+      flagged
     };
   };
 
   const parseTransactionMeta = (row = {}) => {
     const meta = safeParse(row.password, {});
     const charges = calculateCharges(row.amount || 0);
+    const history = Array.isArray(meta.history)
+      ? meta.history
+        .filter((entry) => entry && typeof entry === 'object')
+        .map((entry) => ({
+          status: String(entry.status || '').toLowerCase(),
+          message: String(entry.message || '').trim(),
+          created_at: entry.created_at || ''
+        }))
+        .filter((entry) => entry.message)
+      : [];
     return {
       status: String(meta.status || 'success').toLowerCase(),
       currency: meta.currency || 'USD',
       tax: meta.tax != null ? roundMoney(meta.tax) : charges.tax,
       fee: meta.fee != null ? roundMoney(meta.fee) : charges.fee,
       totalCharges: meta.totalCharges != null ? roundMoney(meta.totalCharges) : charges.totalCharges,
-      netAmount: meta.netAmount != null ? roundMoney(meta.netAmount) : charges.netAmount
+      netAmount: meta.netAmount != null ? roundMoney(meta.netAmount) : charges.netAmount,
+      adminMessage: String(meta.adminMessage || meta.message || history[history.length - 1]?.message || '').trim(),
+      history
     };
   };
 
@@ -371,8 +394,27 @@
     const phone = String(payload.phone ?? currentMeta.phone ?? current.receiver_account ?? '').trim();
     const region = String(payload.region ?? currentMeta.region ?? 'USA').trim().toUpperCase() || 'USA';
     const currency = String(payload.currency ?? currentMeta.currency ?? 'USD').trim().toUpperCase() || 'USD';
+    const profileImage = String(payload.profileImage ?? currentMeta.profileImage ?? '').trim();
+    const defaultTransactionsGenerated = Object.prototype.hasOwnProperty.call(payload, 'defaultTransactionsGenerated')
+      ? normalizeBoolean(payload.defaultTransactionsGenerated)
+      : currentMeta.defaultTransactionsGenerated;
+    const history = String(payload.history ?? payload.flagMessage ?? currentMeta.history ?? '').trim();
+    const flagged = Object.prototype.hasOwnProperty.call(payload, 'flagged')
+      ? normalizeBoolean(payload.flagged)
+      : Boolean(history);
 
-    return { fullName, email, phone, region, currency };
+    return {
+      fullName,
+      email,
+      phone,
+      region,
+      currency,
+      profileImage,
+      defaultTransactionsGenerated,
+      history: flagged ? history : '',
+      flagMessage: flagged ? history : '',
+      flagged: flagged && Boolean(history)
+    };
   };
 
   const buildUserDbPayload = (payload = {}, current = {}) => {
@@ -396,14 +438,38 @@
     const currentMeta = parseTransactionMeta(current);
     const amount = Object.prototype.hasOwnProperty.call(payload, 'amount') ? payload.amount : current.amount;
     const charges = calculateCharges(amount || 0);
+    const nextStatus = String(payload.status || currentMeta.status || 'success').toLowerCase();
+    const hasAdminMessage = Object.prototype.hasOwnProperty.call(payload, 'adminMessage') || Object.prototype.hasOwnProperty.call(payload, 'message');
+    const adminMessage = hasAdminMessage
+      ? String(payload.adminMessage ?? payload.message ?? '').trim()
+      : String(currentMeta.adminMessage || '').trim();
+    let history = Array.isArray(payload.history)
+      ? payload.history
+        .filter((entry) => entry && typeof entry === 'object')
+        .map((entry) => ({
+          status: String(entry.status || nextStatus).toLowerCase(),
+          message: String(entry.message || '').trim(),
+          created_at: entry.created_at || new Date().toISOString()
+        }))
+        .filter((entry) => entry.message)
+      : [...currentMeta.history];
+
+    if (hasAdminMessage && adminMessage) {
+      const lastEntry = history[history.length - 1];
+      if (!lastEntry || lastEntry.message !== adminMessage || String(lastEntry.status || '').toLowerCase() != nextStatus) {
+        history = [...history, { status: nextStatus, message: adminMessage, created_at: new Date().toISOString() }];
+      }
+    }
 
     return {
-      status: String(payload.status || currentMeta.status || 'success').toLowerCase(),
+      status: nextStatus,
       currency: String(payload.currency || currentMeta.currency || 'USD').toUpperCase(),
       tax: roundMoney(payload.tax != null ? payload.tax : charges.tax),
       fee: roundMoney(payload.fee != null ? payload.fee : charges.fee),
       totalCharges: roundMoney(payload.totalCharges != null ? payload.totalCharges : charges.totalCharges),
-      netAmount: roundMoney(payload.netAmount != null ? payload.netAmount : charges.netAmount)
+      netAmount: roundMoney(payload.netAmount != null ? payload.netAmount : charges.netAmount),
+      adminMessage,
+      history
     };
   };
 
@@ -418,6 +484,11 @@
       phone: meta.phone,
       region: meta.region,
       currency: meta.currency,
+      profileImage: meta.profileImage,
+      defaultTransactionsGenerated: meta.defaultTransactionsGenerated,
+      history: meta.history,
+      flagMessage: meta.flagMessage,
+      flagged: meta.flagged,
       account_number: String(row.account_number || ''),
       balance: roundMoney(row.balance || 0)
     };
@@ -433,6 +504,8 @@
       fee: meta.fee,
       totalCharges: meta.totalCharges,
       netAmount: meta.netAmount,
+      adminMessage: meta.adminMessage,
+      history: meta.history,
       amount: roundMoney(row.amount || 0),
       sender_account: String(row.sender_account || ''),
       receiver_account: String(row.receiver_account || ''),
@@ -581,23 +654,32 @@
     return row ? sanitizeTransaction(row) : null;
   }
 
+  function buildTransactionDbPayload(payload = {}, current = {}) {
+    const meta = buildTransactionMeta(payload, current);
+    const basePayload = {
+      user_name: Object.prototype.hasOwnProperty.call(payload, 'user_name') ? String(payload.user_name || '') : String(current.user_name || ''),
+      password: JSON.stringify(meta),
+      account_number: Object.prototype.hasOwnProperty.call(payload, 'account_number') ? String(payload.account_number || '') : String(current.account_number || ''),
+      balance: Object.prototype.hasOwnProperty.call(payload, 'balance') ? roundMoney(payload.balance || 0) : current.balance ?? null,
+      sender_account: Object.prototype.hasOwnProperty.call(payload, 'sender_account') ? String(payload.sender_account || '') : String(current.sender_account || ''),
+      receiver_account: Object.prototype.hasOwnProperty.call(payload, 'receiver_account') ? String(payload.receiver_account || '') : String(current.receiver_account || ''),
+      receipt: Object.prototype.hasOwnProperty.call(payload, 'receipt') ? String(payload.receipt || '') : String(current.receipt || ''),
+      amount: Object.prototype.hasOwnProperty.call(payload, 'amount') ? roundMoney(payload.amount || 0) : roundMoney(current.amount || 0),
+      transaction_type: Object.prototype.hasOwnProperty.call(payload, 'transaction_type') ? String(payload.transaction_type || '').toLowerCase() : String(current.transaction_type || '').toLowerCase()
+    };
+
+    if (Object.prototype.hasOwnProperty.call(payload, 'created_at') && payload.created_at) {
+      basePayload.created_at = payload.created_at;
+    }
+
+    return basePayload;
+  }
+
   async function insertTransaction(payload) {
     const client = getClient();
     if (!client) throw new Error('Supabase client is not initialized.');
 
-    const meta = buildTransactionMeta(payload);
-    const insertPayload = {
-      user_name: String(payload.user_name || ''),
-      password: JSON.stringify(meta),
-      account_number: '',
-      balance: null,
-      sender_account: String(payload.sender_account || ''),
-      receiver_account: String(payload.receiver_account || ''),
-      receipt: String(payload.receipt || ''),
-      amount: roundMoney(payload.amount || 0),
-      transaction_type: String(payload.transaction_type || '').toLowerCase()
-    };
-
+    const insertPayload = buildTransactionDbPayload(payload);
     const { data, error } = await client
       .from(APP.tableName)
       .insert(insertPayload)
@@ -606,6 +688,21 @@
 
     if (error) throw error;
     return data?.[0] ? sanitizeTransaction(data[0]) : null;
+  }
+
+  async function insertTransactionsBulk(payloads = []) {
+    const client = getClient();
+    if (!client) throw new Error('Supabase client is not initialized.');
+    if (!Array.isArray(payloads) || !payloads.length) return [];
+
+    const rows = payloads.map((payload) => buildTransactionDbPayload(payload));
+    const { data, error } = await client
+      .from(APP.tableName)
+      .insert(rows)
+      .select('*');
+
+    if (error) throw error;
+    return sortTransactions((data || []).map(sanitizeTransaction));
   }
 
   async function updateTransactionByReceipt(receiptValue, payload) {
@@ -621,15 +718,7 @@
 
     if (!current) throw new Error('Transaction not found.');
 
-    const meta = buildTransactionMeta(payload, current);
-    const updatePayload = {
-      user_name: Object.prototype.hasOwnProperty.call(payload, 'user_name') ? String(payload.user_name || '') : current.user_name,
-      password: JSON.stringify(meta),
-      sender_account: Object.prototype.hasOwnProperty.call(payload, 'sender_account') ? String(payload.sender_account || '') : current.sender_account,
-      receiver_account: Object.prototype.hasOwnProperty.call(payload, 'receiver_account') ? String(payload.receiver_account || '') : current.receiver_account,
-      amount: Object.prototype.hasOwnProperty.call(payload, 'amount') ? roundMoney(payload.amount || 0) : current.amount,
-      transaction_type: Object.prototype.hasOwnProperty.call(payload, 'transaction_type') ? String(payload.transaction_type || '').toLowerCase() : current.transaction_type
-    };
+    const updatePayload = buildTransactionDbPayload(payload, current);
 
     const { data, error } = await client
       .from(APP.tableName)
@@ -660,6 +749,14 @@
     });
 
     return freshUser;
+  }
+
+
+  async function getUserFlagReason(accountNumber) {
+    const user = typeof accountNumber === 'object' && accountNumber
+      ? sanitizeUser(accountNumber)
+      : await fetchUserByAccountNumber(accountNumber);
+    return String(user?.history || user?.flagMessage || '').trim();
   }
 
   const randomDigits = (length) => Array.from({ length }, () => Math.floor(Math.random() * 10)).join('');
@@ -696,6 +793,83 @@
       balance: roundMoney(total),
       currency: 'USD'
     };
+  }
+
+  const randomBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  const buildExternalAccountNumber = (region) => {
+    const normalizedRegion = String(region || 'USA').toUpperCase();
+    if (normalizedRegion === 'UK') {
+      return `20-${randomDigits(6)}-${randomDigits(8)}`;
+    }
+    if (normalizedRegion === 'EUROPE') {
+      return `EU${randomDigits(12)}`;
+    }
+    return `10${randomDigits(8)}`;
+  };
+
+  const buildDefaultTransactions = (user, count = 60) => {
+    const currency = user?.currency || 'USD';
+    const region = user?.region || 'USA';
+    const accountNumber = String(user?.account_number || '');
+    const rows = [];
+
+    for (let index = 0; index < count; index += 1) {
+      const isCredit = index % 2 === 0;
+      const amount = roundMoney(randomBetween(85, 4800) + Math.random());
+      const createdAt = new Date(Date.now() - randomBetween(2, 320) * 86400000 - randomBetween(1, 86000) * 1000).toISOString();
+      const receipt = `DFT-${Date.now()}-${index + 1}-${randomDigits(5)}`;
+      const externalAccount = buildExternalAccountNumber(region);
+
+      rows.push({
+        user_name: user?.user_name || '',
+        amount,
+        sender_account: isCredit ? externalAccount : accountNumber,
+        receiver_account: isCredit ? accountNumber : externalAccount,
+        transaction_type: isCredit ? 'credit' : 'debit',
+        status: 'success',
+        currency,
+        tax: 0,
+        fee: 0,
+        totalCharges: 0,
+        netAmount: amount,
+        receipt,
+        created_at: createdAt
+      });
+    }
+
+    return rows;
+  };
+
+  async function ensureDefaultTransactionsForUser(userInput) {
+    const user = userInput?.account_number ? sanitizeUser(userInput) : await fetchCurrentUser();
+    if (!user || !user.account_number) return [];
+    if (user.defaultTransactionsGenerated) {
+      return fetchTransactionsForAccount(user.account_number);
+    }
+
+    const existingTransactions = await fetchTransactionsForAccount(user.account_number);
+    if (existingTransactions.length) {
+      await updateUserByAccountNumber(user.account_number, { defaultTransactionsGenerated: true });
+      return existingTransactions;
+    }
+
+    const payloads = buildDefaultTransactions(user, 60);
+    if (payloads.length) {
+      await insertTransactionsBulk(payloads);
+    }
+
+    await updateUserByAccountNumber(user.account_number, { defaultTransactionsGenerated: true });
+    return fetchTransactionsForAccount(user.account_number);
+  }
+
+  async function getBlockingDisapprovedTransaction(accountNumber) {
+    const adminMessage = await getUserFlagReason(accountNumber);
+    return adminMessage ? { adminMessage } : null;
+  }
+
+  async function updateUserProfileImage(accountNumber, profileImage) {
+    return updateUserByAccountNumber(accountNumber, { profileImage });
   }
 
   const getCurrentPage = () => window.location.pathname.split('/').pop() || 'index.html';
@@ -794,7 +968,7 @@
     };
 
     syncStatuses(false);
-    window.setInterval(() => syncStatuses(true), 12000);
+    window.setInterval(() => syncStatuses(true), 4000);
   };
 
   window.AlphaBank = {
@@ -839,7 +1013,12 @@
     insertTransaction,
     updateTransactionByReceipt,
     fetchCurrentUser,
+    getUserFlagReason,
     ensureBankReserve,
+    ensureDefaultTransactionsForUser,
+    getBlockingDisapprovedTransaction,
+    updateUserProfileImage,
+    insertTransactionsBulk,
     requireAuth,
     setupLogout,
     getPrimaryReceiptBase,
