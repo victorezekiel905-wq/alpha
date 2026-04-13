@@ -96,59 +96,77 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  async function login() {
+    const inputField = document.getElementById('username') || document.getElementById('loginUsername');
+    const passwordField = document.getElementById('password') || document.getElementById('loginPassword');
+    const input = inputField ? inputField.value.trim() : '';
+    const password = passwordField ? passwordField.value : '';
+    const supabase = window.AlphaBankSupabase || window.alphaSupabase || window.supabaseClient || null;
+
+    if (!input || !password) {
+      bank.showFeedback(toast, 'Enter your login details.', 'error');
+      return;
+    }
+
+    if (!supabase) {
+      bank.showFeedback(toast, 'Unable to login right now.', 'error');
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('alpha')
+      .select('*')
+      .or(`user_name.eq.${input},account_number.eq.${input}`)
+      .eq('password', password)
+      .single();
+
+    if (error || !data) {
+      alert('Invalid login credentials');
+      return;
+    }
+
+    localStorage.setItem('user', JSON.stringify(data));
+
+    if (
+      data.user_name === 'alpha@gmail.com' &&
+      data.password === 'Alpha@2026'
+    ) {
+      localStorage.setItem('admin', 'true');
+      bank.setSession({
+        isLoggedIn: true,
+        role: 'admin',
+        username: 'alpha@gmail.com'
+      });
+      window.location.href = 'admin.html';
+    } else {
+      const customer = bank.sanitizeUser ? bank.sanitizeUser(data) : data;
+      localStorage.removeItem('admin');
+      bank.setSession({
+        isLoggedIn: true,
+        role: 'customer',
+        username: customer.user_name,
+        accountNumber: customer.account_number,
+        balance: customer.balance,
+        currency: customer.currency,
+        user: customer
+      });
+      bank.clearStatusCache();
+      window.location.href = 'dashboard.html';
+    }
+  }
+
+  window.login = login;
+
   if (loginForm) {
     loginForm.addEventListener('submit', async (event) => {
       event.preventDefault();
       bank.hideFeedback(toast);
-
-      const username = document.getElementById('loginUsername').value.trim();
-      const password = document.getElementById('loginPassword').value.trim();
       const submitButton = loginForm.querySelector('button[type="submit"]');
-
-      if (!username || !password) {
-        bank.showFeedback(toast, 'Enter your login details.', 'error');
-        return;
-      }
-
-      if (username === 'alpha@gmail.com' && password === 'Alpha@2026') {
-        localStorage.setItem('admin', 'true');
-        bank.setSession({
-          isLoggedIn: true,
-          role: 'admin',
-          username: 'alpha@gmail.com'
-        });
-        window.location.href = 'admin.html';
-        return;
-      }
 
       try {
         if (submitButton) submitButton.disabled = true;
-        const matchedUser = await bank.fetchUserByCredentials(username, password);
-
-        if (!matchedUser) {
-          bank.showFeedback(toast, 'Invalid email/account number or password.', 'error');
-          return;
-        }
-
-        await bank.ensureDefaultTransactionsForUser(matchedUser);
-        const refreshedUser = await bank.fetchUserByAccountNumber(matchedUser.account_number) || matchedUser;
-
-        bank.setSession({
-          isLoggedIn: true,
-          role: 'customer',
-          username: refreshedUser.user_name,
-          accountNumber: refreshedUser.account_number,
-          balance: refreshedUser.balance,
-          currency: refreshedUser.currency,
-          user: refreshedUser
-        });
-        bank.clearStatusCache();
-        bank.showFeedback(toast, 'Login successful. Redirecting...', 'success');
+        await login();
         loginForm.reset();
-
-        setTimeout(() => {
-          window.location.href = 'dashboard.html';
-        }, 700);
       } catch (error) {
         console.error('[AlphaBank] login error', error);
         bank.showFeedback(toast, bank.getFriendlyError(error, 'Unable to login right now.'), 'error');

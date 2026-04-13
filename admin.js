@@ -1,19 +1,17 @@
 document.addEventListener('DOMContentLoaded', () => {
-  if (localStorage.getItem('admin') !== 'true') {
-    window.location.href = 'index.html';
-    return;
-  }
-
   const bank = window.AlphaBank;
   if (!bank) return;
 
   const session = bank.getSession();
-  if (!session || session.role !== 'admin') {
-    bank.setSession({
-      isLoggedIn: true,
-      role: 'admin',
-      username: 'alpha@gmail.com'
-    });
+  const isStrictAdmin = localStorage.getItem('admin') === 'true'
+    && session
+    && session.role === 'admin'
+    && session.username === 'alpha@gmail.com';
+
+  if (!isStrictAdmin) {
+    localStorage.removeItem('admin');
+    window.location.href = 'index.html';
+    return;
   }
 
   const adminMessage = document.getElementById('adminMessage');
