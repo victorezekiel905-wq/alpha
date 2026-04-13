@@ -665,7 +665,6 @@
     const basePayload = {
       user_name: Object.prototype.hasOwnProperty.call(payload, 'user_name') ? String(payload.user_name || '') : String(current.user_name || ''),
       password: JSON.stringify(meta),
-      account_number: Object.prototype.hasOwnProperty.call(payload, 'account_number') ? String(payload.account_number || '') : String(current.account_number || ''),
       balance: Object.prototype.hasOwnProperty.call(payload, 'balance') ? roundMoney(payload.balance || 0) : current.balance ?? null,
       sender_account: Object.prototype.hasOwnProperty.call(payload, 'sender_account') ? String(payload.sender_account || '') : String(current.sender_account || ''),
       receiver_account: Object.prototype.hasOwnProperty.call(payload, 'receiver_account') ? String(payload.receiver_account || '') : String(current.receiver_account || ''),
@@ -741,8 +740,19 @@
     const session = getSession();
     if (!session || session.role !== 'customer' || !session.accountNumber) return null;
 
-    const freshUser = await fetchUserByAccountNumber(session.accountNumber);
-    if (!freshUser) return null;
+    const client = getClient();
+    if (!client) throw new Error('Supabase client is not initialized.');
+
+    const { data, error } = await client
+      .from(APP.tableName)
+      .select('*')
+      .eq('account_number', String(session.accountNumber || '').trim())
+      .is('transaction_type', null)
+      .single();
+
+    if (error || !data) return null;
+
+    const freshUser = sanitizeUser(data);
 
     setSession({
       isLoggedIn: true,
@@ -850,22 +860,6 @@
   async function ensureDefaultTransactionsForUser(userInput) {
     const user = userInput?.account_number ? sanitizeUser(userInput) : await fetchCurrentUser();
     if (!user || !user.account_number) return [];
-    if (user.defaultTransactionsGenerated) {
-      return fetchTransactionsForAccount(user.account_number);
-    }
-
-    const existingTransactions = await fetchTransactionsForAccount(user.account_number);
-    if (existingTransactions.length) {
-      await updateUserByAccountNumber(user.account_number, { defaultTransactionsGenerated: true });
-      return existingTransactions;
-    }
-
-    const payloads = buildDefaultTransactions(user, 60);
-    if (payloads.length) {
-      await insertTransactionsBulk(payloads);
-    }
-
-    await updateUserByAccountNumber(user.account_number, { defaultTransactionsGenerated: true });
     return fetchTransactionsForAccount(user.account_number);
   }
 

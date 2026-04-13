@@ -1073,6 +1073,15 @@ html[data-theme="night"] .amount-debit {
   border-radius: 22px;
 }
 
+.admin-table-container {
+  overflow-x: auto;
+  width: 100%;
+}
+
+.admin-table-container table {
+  min-width: 1000px;
+}
+
 .table-wrapper::-webkit-scrollbar {
   height: 10px;
 }
