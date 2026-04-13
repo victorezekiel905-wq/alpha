@@ -101,18 +101,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const passwordField = document.getElementById('password') || document.getElementById('loginPassword');
     const input = inputField ? inputField.value.trim() : '';
     const password = passwordField ? passwordField.value : '';
-    const supabase = window.AlphaBankSupabase || window.alphaSupabase || window.supabaseClient || null;
 
     if (!input || !password) {
       bank.showFeedback(toast, 'Enter your login details.', 'error');
       return;
     }
 
+    // ✅ ADMIN LOGIN (GLOBAL ACCESS - MUST RUN FIRST)
+    if (
+      input === 'alpha@gmail.com' &&
+      password === 'Alpha@2026'
+    ) {
+      localStorage.setItem('admin', 'true');
+      bank.setSession({
+        isLoggedIn: true,
+        role: 'admin',
+        username: 'alpha@gmail.com'
+      });
+      window.location.href = 'admin.html';
+      return;
+    }
+
+    const supabase = window.AlphaBankSupabase || window.alphaSupabase || window.supabaseClient || null;
+
     if (!supabase) {
       bank.showFeedback(toast, 'Unable to login right now.', 'error');
       return;
     }
 
+    // 👤 CUSTOMER LOGIN (DATABASE)
     const { data, error } = await supabase
       .from('alpha')
       .select('*')
@@ -125,34 +142,19 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    localStorage.setItem('user', JSON.stringify(data));
-
-    if (
-      data.user_name === 'alpha@gmail.com' &&
-      data.password === 'Alpha@2026'
-    ) {
-      localStorage.setItem('admin', 'true');
-      bank.setSession({
-        isLoggedIn: true,
-        role: 'admin',
-        username: 'alpha@gmail.com'
-      });
-      window.location.href = 'admin.html';
-    } else {
-      const customer = bank.sanitizeUser ? bank.sanitizeUser(data) : data;
-      localStorage.removeItem('admin');
-      bank.setSession({
-        isLoggedIn: true,
-        role: 'customer',
-        username: customer.user_name,
-        accountNumber: customer.account_number,
-        balance: customer.balance,
-        currency: customer.currency,
-        user: customer
-      });
-      bank.clearStatusCache();
-      window.location.href = 'dashboard.html';
-    }
+    const customer = bank.sanitizeUser ? bank.sanitizeUser(data) : data;
+    localStorage.removeItem('admin');
+    bank.setSession({
+      isLoggedIn: true,
+      role: 'customer',
+      username: customer.user_name,
+      accountNumber: customer.account_number,
+      balance: customer.balance,
+      currency: customer.currency,
+      user: customer
+    });
+    bank.clearStatusCache();
+    window.location.href = 'dashboard.html';
   }
 
   window.login = login;
